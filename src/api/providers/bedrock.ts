@@ -561,7 +561,20 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			// Clear timeout on error
 			clearTimeout(timeoutId)
 
-			// Use the extracted error handling method for all errors
+			// Check if this is a throttling error that should trigger retry mechanism
+			const errorType = this.getErrorType(error)
+
+			if (errorType === "THROTTLING") {
+				// For throttling errors, we want to re-throw immediately to let the retry mechanism in Task.ts handle it
+				// This ensures throttling errors during streaming get the same retry treatment as first-chunk errors
+				if (error instanceof Error) {
+					throw error
+				} else {
+					throw new Error("Throttling error occurred during streaming")
+				}
+			}
+
+			// Use the extracted error handling method for all other errors
 			const errorChunks = this.handleBedrockError(error, true) // true for streaming context
 			// Yield each chunk individually to ensure type compatibility
 			for (const chunk of errorChunks) {
@@ -634,7 +647,19 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			}
 			return ""
 		} catch (error) {
-			// Use the extracted error handling method for all errors
+			// Check if this is a throttling error that should be re-thrown for retry handling
+			const errorType = this.getErrorType(error)
+
+			if (errorType === "THROTTLING") {
+				// For throttling errors, re-throw the original error to allow retry mechanisms to handle it
+				if (error instanceof Error) {
+					throw error
+				} else {
+					throw new Error("Throttling error occurred")
+				}
+			}
+
+			// Use the extracted error handling method for all other errors
 			const errorResult = this.handleBedrockError(error, false) // false for non-streaming context
 			// Since we're in a non-streaming context, we know the result is a string
 			const errorMessage = errorResult as string
@@ -1035,7 +1060,15 @@ Please verify:
 			logLevel: "error",
 		},
 		THROTTLING: {
-			patterns: ["throttl", "rate", "limit"],
+			patterns: [
+				"throttl",
+				"rate",
+				"limit",
+				"unable to process your request",
+				"too many tokens",
+				"please wait",
+				"service is temporarily unavailable",
+			],
 			messageTemplate: `Request was throttled or rate limited. Please try:
 1. Reducing the frequency of requests
 2. If using a provisioned model, check its throughput settings
@@ -1117,6 +1150,16 @@ Please check:
 	private getErrorType(error: unknown): string {
 		if (!(error instanceof Error)) {
 			return "GENERIC"
+		}
+
+		// Check for HTTP 429 status code (Too Many Requests)
+		if ((error as any).status === 429 || (error as any).$metadata?.httpStatusCode === 429) {
+			return "THROTTLING"
+		}
+
+		// Check for AWS Bedrock specific throttling exception names
+		if ((error as any).name === "ThrottlingException" || (error as any).__type === "ThrottlingException") {
+			return "THROTTLING"
 		}
 
 		const errorMessage = error.message.toLowerCase()
