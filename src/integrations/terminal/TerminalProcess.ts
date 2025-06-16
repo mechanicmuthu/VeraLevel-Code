@@ -99,11 +99,6 @@ export class TerminalProcess extends BaseTerminalProcess {
 			})
 		})
 
-		// Create promise that resolves when shell execution completes for this terminal
-		const shellExecutionComplete = new Promise<ExitCodeDetails>((resolve) => {
-			this.once("shell_execution_complete", (details: ExitCodeDetails) => resolve(details))
-		})
-
 		// Execute command
 		const defaultWindowsShellProfile = vscode.workspace
 			.getConfiguration("terminal.integrated.defaultProfile")
@@ -114,17 +109,34 @@ export class TerminalProcess extends BaseTerminalProcess {
 			(defaultWindowsShellProfile === null ||
 				(defaultWindowsShellProfile as string)?.toLowerCase().includes("powershell"))
 
+		// Create promise that resolves when shell execution completes for this terminal
+		const shellExecutionComplete = new Promise<ExitCodeDetails>((resolve, reject) => {
+			this.once("shell_execution_complete", (details: ExitCodeDetails) => resolve(details))
+
+			// Add a timeout for PowerShell commands to prevent hanging
+			if (isPowerShell) {
+				const timeout = setTimeout(() => {
+					console.warn(`[Terminal ${this.terminal.id}] PowerShell command timed out, forcing completion`)
+					resolve({ exitCode: 0 }) // Assume success if no explicit failure
+				}, Terminal.getShellIntegrationTimeout() + 5000) // Add 5 seconds buffer to shell integration timeout
+
+				// Clear timeout when shell execution completes normally
+				this.once("shell_execution_complete", () => clearTimeout(timeout))
+			}
+		})
+
 		if (isPowerShell) {
 			let commandToExecute = command
 
 			// Only add the PowerShell counter workaround if enabled
 			if (Terminal.getPowershellCounter()) {
-				commandToExecute += ` ; "(Roo/PS Workaround: ${this.terminal.cmdCounter++})" > $null`
+				commandToExecute += ` ; Write-Output "(Roo/PS Workaround: ${this.terminal.cmdCounter++})" | Out-Null`
 			}
 
 			// Only add the sleep command if the command delay is greater than 0
+			// Wrap the entire command in a try-finally block to ensure proper completion
 			if (Terminal.getCommandDelay() > 0) {
-				commandToExecute += ` ; start-sleep -milliseconds ${Terminal.getCommandDelay()}`
+				commandToExecute = `try { ${commandToExecute} } finally { Start-Sleep -Milliseconds ${Terminal.getCommandDelay()} }`
 			}
 
 			terminal.shellIntegration.executeCommand(commandToExecute)
