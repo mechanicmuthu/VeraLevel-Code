@@ -389,4 +389,74 @@ describe("AwsBedrockHandler Error Handling", () => {
 			}
 		})
 	})
+
+	describe("Enhanced Error Throw for Retry System", () => {
+		it("should throw enhanced error messages for completePrompt to display in retry system", async () => {
+			const throttlingError = createMockError({
+				message: "Too many tokens, rate limited",
+				status: 429,
+				$metadata: {
+					httpStatusCode: 429,
+					requestId: "test-request-id-12345",
+				},
+			})
+			mockSend.mockRejectedValueOnce(throttlingError)
+
+			try {
+				await handler.completePrompt("test")
+				throw new Error("Expected error to be thrown")
+			} catch (error) {
+				// Should contain error codes (note: completePrompt adds "Bedrock completion error: " prefix)
+				expect(error.message).toContain("[HTTP 429")
+				// Should contain the verbose message template
+				expect(error.message).toContain("Request was throttled or rate limited")
+				// Should contain debug information
+				expect(error.message).toContain("Request ID: test-request-id-12345")
+				// Should preserve original error properties
+				expect((error as any).status).toBe(429)
+				expect((error as any).$metadata.requestId).toBe("test-request-id-12345")
+			}
+		})
+
+		it("should throw enhanced error messages for createMessage streaming to display in retry system", async () => {
+			const tokenError = createMockError({
+				message: "Too many tokens in request",
+				name: "ValidationException",
+				$metadata: {
+					httpStatusCode: 400,
+					requestId: "token-error-id-67890",
+					extendedRequestId: "extended-12345",
+				},
+			})
+
+			const mockStream = {
+				[Symbol.asyncIterator]() {
+					return {
+						async next() {
+							throw tokenError
+						},
+					}
+				},
+			}
+
+			mockSend.mockResolvedValueOnce({ stream: mockStream })
+
+			try {
+				const stream = handler.createMessage("system", [{ role: "user", content: "test" }])
+				for await (const chunk of stream) {
+					// Should not reach here as it should throw an error
+				}
+				throw new Error("Expected error to be thrown")
+			} catch (error) {
+				// Should contain error codes (note: this will be caught by the non-throttling error path)
+				expect(error.message).toContain("Too many tokens")
+				// Should contain debug information
+				expect(error.message).toContain("Request ID: token-error-id-67890")
+				expect(error.message).toContain("Extended Request ID: extended-12345")
+				// Should preserve original error properties
+				expect(error.name).toBe("ValidationException")
+				expect((error as any).$metadata.requestId).toBe("token-error-id-67890")
+			}
+		})
+	})
 })

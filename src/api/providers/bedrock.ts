@@ -581,9 +581,19 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 				yield chunk as any // Cast to any to bypass type checking since we know the structure is correct
 			}
 
-			// Re-throw the error
+			// Re-throw with enhanced error message so retry system shows verbose details
+			const enhancedErrorMessage = this.formatErrorMessage(error, this.getErrorType(error), true)
 			if (error instanceof Error) {
-				throw error
+				const enhancedError = new Error(enhancedErrorMessage)
+				// Preserve important properties from the original error
+				enhancedError.name = error.name
+				if ((error as any).status) {
+					;(enhancedError as any).status = (error as any).status
+				}
+				if ((error as any).$metadata) {
+					;(enhancedError as any).$metadata = (error as any).$metadata
+				}
+				throw enhancedError
 			} else {
 				throw new Error("An unknown error occurred")
 			}
@@ -651,7 +661,20 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			const errorResult = this.handleBedrockError(error, false) // false for non-streaming context
 			// Since we're in a non-streaming context, we know the result is a string
 			const errorMessage = errorResult as string
-			throw new Error(errorMessage)
+
+			// Create enhanced error with verbose details for retry system
+			const enhancedError = new Error(errorMessage)
+			if (error instanceof Error) {
+				// Preserve important properties from the original error
+				enhancedError.name = error.name
+				if ((error as any).status) {
+					;(enhancedError as any).status = (error as any).status
+				}
+				if ((error as any).$metadata) {
+					;(enhancedError as any).$metadata = (error as any).$metadata
+				}
+			}
+			throw enhancedError
 		}
 	}
 
