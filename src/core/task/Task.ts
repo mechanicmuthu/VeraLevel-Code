@@ -1142,6 +1142,9 @@ export class Task extends EventEmitter<ClineEvents> {
 			throw new Error(`[RooCode#recursivelyMakeRooRequests] task ${this.taskId}.${this.instanceId} aborted`)
 		}
 
+		// Check for context overflow contingency before processing
+		await this.checkContextOverflowContingency()
+
 		if (this.consecutiveMistakeCount >= this.consecutiveMistakeLimit) {
 			const { response, text, images } = await this.ask(
 				"mistake_limit_reached",
@@ -1682,6 +1685,9 @@ export class Task extends EventEmitter<ClineEvents> {
 		const { contextTokens } = this.getTokenUsage()
 
 		if (contextTokens) {
+			// Check for context overflow contingency before processing
+			await this.checkContextOverflowContingency()
+
 			// Default max tokens value for thinking models when no specific
 			// value is set.
 			const DEFAULT_THINKING_MODEL_MAX_TOKENS = 16_384
@@ -1890,6 +1896,109 @@ export class Task extends EventEmitter<ClineEvents> {
 		if (error) {
 			this.emit("taskToolFailed", this.taskId, toolName, error)
 		}
+	}
+
+	// Context Overflow Contingency
+
+	private async checkContextOverflowContingency(): Promise<void> {
+		// Only check for subtasks (tasks with a parent)
+		if (!this.parentTask) {
+			return
+		}
+
+		const provider = this.providerRef.deref()
+		if (!provider) {
+			return
+		}
+
+		const state = await provider.getState()
+		const { mode, customModes } = state
+
+		// Find the current mode configuration
+		const currentModeConfig = customModes?.find((m) => m.slug === mode)
+		if (!currentModeConfig?.contextOverflowContingency?.enabled) {
+			return
+		}
+
+		// Get current token usage
+		const { contextTokens } = this.getTokenUsage()
+		if (!contextTokens) {
+			return
+		}
+
+		// Get model context window
+		const modelInfo = this.api.getModel().info
+		const contextWindow = modelInfo.contextWindow
+
+		// Check if we're approaching the context limit (90% threshold)
+		const contextUsagePercentage = (contextTokens / contextWindow) * 100
+		const overflowThreshold = 90 // 90% of context window
+
+		if (contextUsagePercentage >= overflowThreshold) {
+			// Determine the failure message
+			let failureMessage =
+				currentModeConfig.contextOverflowContingency.message ||
+				"Task failed because of a context overflow, possibly because webpage returned from the browser was too big"
+
+			// Check if there's a tool-specific message for the last tool used
+			const lastToolUsed = this.getLastToolUsed()
+			if (lastToolUsed && currentModeConfig.contextOverflowContingency.toolSpecific?.[lastToolUsed]) {
+				failureMessage = currentModeConfig.contextOverflowContingency.toolSpecific[lastToolUsed]
+			}
+
+			// Exit the subtask with attempt_completion
+			await this.say(
+				"text",
+				`Context overflow detected (${Math.round(contextUsagePercentage)}% of ${contextWindow} tokens used). ${failureMessage}`,
+			)
+
+			// Use attempt_completion to exit gracefully
+			await this.handleAttemptCompletion(failureMessage)
+
+			// Abort the current task
+			this.abort = true
+		}
+	}
+
+	private getLastToolUsed(): string | undefined {
+		// Look through recent assistant messages to find the last tool used
+		const recentMessages = this.clineMessages.slice(-10) // Check last 10 messages
+		for (let i = recentMessages.length - 1; i >= 0; i--) {
+			const message = recentMessages[i]
+			// Check for tool usage in various message types
+			if (message.type === "say" && message.text) {
+				// Look for tool usage patterns in the message text
+				const toolPatterns = [
+					/<(\w+)>/, // XML-style tool tags like <read_file>
+					/\[(\w+)\s+Result\]/, // Tool result patterns
+					/using\s+(\w+)\s+tool/i, // "using X tool" patterns
+				]
+
+				for (const pattern of toolPatterns) {
+					const match = message.text.match(pattern)
+					if (match && match[1]) {
+						return match[1]
+					}
+				}
+			}
+		}
+		return undefined
+	}
+
+	private async handleAttemptCompletion(result: string): Promise<void> {
+		// Add the completion result to the conversation history
+		await this.addToApiConversationHistory({
+			role: "assistant",
+			content: [
+				{
+					type: "text",
+					text: `<attempt_completion>\n<result>\n${result}\n</result>\n</attempt_completion>`,
+				},
+			],
+		})
+
+		// Emit completion event
+		this.emit("taskCompleted", this.taskId, this.getTokenUsage(), this.toolUsage)
 	}
 
 	// Getters
