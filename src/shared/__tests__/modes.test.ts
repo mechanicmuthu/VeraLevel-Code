@@ -93,24 +93,37 @@ describe("isToolAllowedForMode", () => {
 			).toThrow(/\\.css\$/)
 		})
 
-		it("handles partial streaming cases (path only, no content/diff)", () => {
-			// Should allow path-only for matching files (no validation yet since content/diff not provided)
+		it("enforces file restrictions even when only path is provided", () => {
+			// File restrictions should be enforced immediately when path is provided, regardless of content/diff
+			expect(() =>
+				isToolAllowedForMode("write_to_file", "markdown-editor", customModes, undefined, {
+					path: "test.js", // Should be rejected - doesn't match .md pattern
+				}),
+			).toThrow(FileRestrictionError)
+
+			expect(() =>
+				isToolAllowedForMode("apply_diff", "markdown-editor", customModes, undefined, {
+					path: "test.js", // Should be rejected - doesn't match .md pattern
+				}),
+			).toThrow(FileRestrictionError)
+
+			// Should reject non-markdown files for architect mode too
+			expect(() =>
+				isToolAllowedForMode("write_to_file", "architect", [], undefined, {
+					path: "test.js", // Should be rejected - doesn't match .md pattern
+				}),
+			).toThrow(FileRestrictionError)
+
+			// But should allow matching files
 			expect(
 				isToolAllowedForMode("write_to_file", "markdown-editor", customModes, undefined, {
-					path: "test.js",
+					path: "test.md", // Should be allowed - matches .md pattern
 				}),
 			).toBe(true)
 
-			expect(
-				isToolAllowedForMode("apply_diff", "markdown-editor", customModes, undefined, {
-					path: "test.js",
-				}),
-			).toBe(true)
-
-			// Should allow path-only for architect mode too
 			expect(
 				isToolAllowedForMode("write_to_file", "architect", [], undefined, {
-					path: "test.js",
+					path: "README.md", // Should be allowed - matches .md pattern
 				}),
 			).toBe(true)
 		})
@@ -203,12 +216,12 @@ describe("isToolAllowedForMode", () => {
 				}),
 			).toBe(true)
 
-			// Test partial streaming cases
-			expect(
+			// Test that non-matching files are rejected even with path only
+			expect(() =>
 				isToolAllowedForMode("write_to_file", "docs-editor", customModesWithDescription, undefined, {
-					path: "test.js",
+					path: "test.js", // Should be rejected - doesn't match pattern
 				}),
-			).toBe(true)
+			).toThrow(FileRestrictionError)
 		})
 
 		it("allows architect mode to edit markdown files only", () => {
@@ -246,6 +259,62 @@ describe("isToolAllowedForMode", () => {
 			expect(isToolAllowedForMode("read_file", "architect", [])).toBe(true)
 			expect(isToolAllowedForMode("browser_action", "architect", [])).toBe(true)
 			expect(isToolAllowedForMode("use_mcp_tool", "architect", [])).toBe(true)
+		})
+	})
+
+	describe("file restriction bug reproduction", () => {
+		it("should enforce file restrictions even when only path is provided (reproduces issue #4732)", () => {
+			// This test reproduces the bug where mode permissions are ignored when only path is provided
+			// The current implementation incorrectly allows this, but it should be rejected
+
+			// Test with custom architect mode that has restricted file patterns
+			const customArchitectMode: ModeConfig[] = [
+				{
+					slug: "architect",
+					name: "🏗️ Architect",
+					roleDefinition: "You are an architect",
+					groups: [
+						"read",
+						[
+							"edit",
+							{
+								fileRegex: "\\.(md|yaml|json|toml|.+ignore|roomodes)$",
+								description: "Documentation and configs",
+							},
+						],
+						"browser",
+						"command",
+						"mcp",
+					],
+				},
+			]
+
+			// This should throw an error because PowerShell scripts (.ps1) don't match the allowed pattern
+			// But currently it returns true due to the bug
+			expect(() =>
+				isToolAllowedForMode("write_to_file", "architect", customArchitectMode, undefined, {
+					path: "script.ps1", // PowerShell script - should be rejected
+				}),
+			).toThrow(FileRestrictionError)
+
+			expect(() =>
+				isToolAllowedForMode("apply_diff", "architect", customArchitectMode, undefined, {
+					path: "script.ps1", // PowerShell script - should be rejected
+				}),
+			).toThrow(FileRestrictionError)
+
+			// These should still work (allowed file types)
+			expect(
+				isToolAllowedForMode("write_to_file", "architect", customArchitectMode, undefined, {
+					path: "README.md",
+				}),
+			).toBe(true)
+
+			expect(
+				isToolAllowedForMode("write_to_file", "architect", customArchitectMode, undefined, {
+					path: "config.yaml",
+				}),
+			).toBe(true)
 		})
 	})
 

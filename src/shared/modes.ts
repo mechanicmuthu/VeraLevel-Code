@@ -258,11 +258,7 @@ export function isToolAllowedForMode(
 		// For the edit group, check file regex if specified
 		if (groupName === "edit" && options.fileRegex) {
 			const filePath = toolParams?.path
-			if (
-				filePath &&
-				(toolParams.diff || toolParams.content || toolParams.operations) &&
-				!doesFileMatchRegex(filePath, options.fileRegex)
-			) {
+			if (filePath && !doesFileMatchRegex(filePath, options.fileRegex)) {
 				throw new FileRestrictionError(mode.name, options.fileRegex, options.description, filePath)
 			}
 		}
