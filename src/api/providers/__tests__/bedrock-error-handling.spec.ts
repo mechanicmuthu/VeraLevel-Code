@@ -42,7 +42,13 @@ describe("AwsBedrockHandler Error Handling", () => {
 		name?: string
 		status?: number
 		__type?: string
-		$metadata?: { httpStatusCode?: number }
+		$metadata?: {
+			httpStatusCode?: number
+			requestId?: string
+			extendedRequestId?: string
+			cfId?: string
+			[key: string]: any // Allow additional properties
+		}
 	}): Error => {
 		const error = new Error(options.message || "Test error") as any
 		if (options.name) error.name = options.name
@@ -128,7 +134,7 @@ describe("AwsBedrockHandler Error Handling", () => {
 				const result = await handler.completePrompt("test")
 				expect(result).toContain("throttled or rate limited")
 			} catch (error) {
-				expect(error.message).toContain("throttled or rate limited")
+				expect(error.message).toMatch(/throttled or rate limited/)
 			}
 		})
 
@@ -154,6 +160,37 @@ describe("AwsBedrockHandler Error Handling", () => {
 				} catch (error) {
 					expect(error.message).toContain("throttled or rate limited")
 				}
+			}
+		})
+
+		it("should display verbose error information including codes and metadata", async () => {
+			const verboseError = createMockError({
+				message: "Bedrock is unable to process your request",
+				name: "ThrottlingException",
+				status: 429,
+				$metadata: {
+					httpStatusCode: 429,
+					requestId: "12345-abcde-67890",
+					extendedRequestId: "extended-12345",
+					cfId: "cf-12345",
+				},
+			})
+
+			mockSend.mockRejectedValueOnce(verboseError)
+
+			try {
+				await handler.completePrompt("test")
+				throw new Error("Expected error to be thrown")
+			} catch (error) {
+				// Should contain error codes
+				expect(error.message).toMatch(/\[.*HTTP 429.*AWS ThrottlingException.*\]/)
+				// Should contain the main error message
+				expect(error.message).toContain("throttled or rate limited")
+				// Should contain debug information
+				expect(error.message).toContain("Debug Info:")
+				expect(error.message).toContain("Request ID: 12345-abcde-67890")
+				expect(error.message).toContain("Extended Request ID: extended-12345")
+				expect(error.message).toContain("CloudFront ID: cf-12345")
 			}
 		})
 	})

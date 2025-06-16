@@ -1231,6 +1231,48 @@ Please check:
 			templateVars.modelId = modelConfig.id
 			templateVars.contextWindow = String(modelConfig.info.contextWindow || "unknown")
 
+			// Extract error codes and identifiers for verbose display
+			const errorCodes: string[] = []
+			const errorMeta: string[] = []
+
+			// HTTP Status Code
+			if ((error as any).status) {
+				errorCodes.push(`HTTP ${(error as any).status}`)
+			}
+			if ((error as any).$metadata?.httpStatusCode) {
+				errorCodes.push(`HTTP ${(error as any).$metadata.httpStatusCode}`)
+			}
+
+			// AWS Error Codes
+			if (error.name && error.name !== "Error") {
+				errorCodes.push(`AWS ${error.name}`)
+			}
+			if ((error as any).__type) {
+				errorCodes.push(`Type ${(error as any).__type}`)
+			}
+
+			// Request ID for debugging
+			if ((error as any).$metadata?.requestId) {
+				errorMeta.push(`Request ID: ${(error as any).$metadata.requestId}`)
+			}
+			if ((error as any).requestId) {
+				errorMeta.push(`Request ID: ${(error as any).requestId}`)
+			}
+
+			// Extended Request ID (S3/CloudFront style)
+			if ((error as any).$metadata?.extendedRequestId) {
+				errorMeta.push(`Extended Request ID: ${(error as any).$metadata.extendedRequestId}`)
+			}
+
+			// CF Request ID (CloudFront)
+			if ((error as any).$metadata?.cfId) {
+				errorMeta.push(`CloudFront ID: ${(error as any).$metadata.cfId}`)
+			}
+
+			// Build error code display
+			templateVars.errorCodes = errorCodes.length > 0 ? `[${errorCodes.join(", ")}]` : ""
+			templateVars.errorMetadata = errorMeta.length > 0 ? `\n\nDebug Info:\n${errorMeta.join("\n")}` : ""
+
 			// Format error details
 			const errorDetails: Record<string, any> = {}
 			Object.getOwnPropertyNames(error).forEach((prop) => {
@@ -1273,6 +1315,16 @@ Please check:
 		// Replace template variables
 		for (const [key, value] of Object.entries(templateVars)) {
 			template = template.replace(new RegExp(`{${key}}`, "g"), value || "")
+		}
+
+		// Add error codes at the beginning if available
+		if (templateVars.errorCodes) {
+			template = `${templateVars.errorCodes} ${template}`
+		}
+
+		// Add metadata at the end if available
+		if (templateVars.errorMetadata) {
+			template = `${template}${templateVars.errorMetadata}`
 		}
 
 		return template
