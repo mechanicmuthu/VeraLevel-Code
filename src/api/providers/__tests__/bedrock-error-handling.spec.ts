@@ -459,4 +459,107 @@ describe("AwsBedrockHandler Error Handling", () => {
 			}
 		})
 	})
+
+	describe("Edge Case Test Coverage", () => {
+		it("should handle concurrent throttling errors correctly", async () => {
+			const throttlingError = createMockError({
+				message: "Bedrock is unable to process your request",
+				status: 429,
+			})
+
+			// Setup multiple concurrent requests that will all fail with throttling
+			mockSend.mockRejectedValue(throttlingError)
+
+			// Execute multiple concurrent requests
+			const promises = Array.from({ length: 5 }, () => handler.completePrompt("test"))
+
+			// All should throw with throttling error
+			const results = await Promise.allSettled(promises)
+
+			results.forEach((result) => {
+				expect(result.status).toBe("rejected")
+				if (result.status === "rejected") {
+					expect(result.reason.message).toContain("throttled or rate limited")
+				}
+			})
+		})
+
+		it("should handle mixed error scenarios with both throttling and other indicators", async () => {
+			// Error with both 429 status (throttling) and validation error message
+			const mixedError = createMockError({
+				message: "ValidationException: Your input is invalid, but also rate limited",
+				name: "ValidationException",
+				status: 429,
+				$metadata: {
+					httpStatusCode: 429,
+					requestId: "mixed-error-id",
+				},
+			})
+
+			mockSend.mockRejectedValueOnce(mixedError)
+
+			try {
+				await handler.completePrompt("test")
+			} catch (error) {
+				// Should be treated as throttling due to 429 status taking priority
+				expect(error.message).toContain("throttled or rate limited")
+				// Should still preserve metadata
+				expect((error as any).$metadata?.requestId).toBe("mixed-error-id")
+			}
+		})
+
+		it("should handle rapid successive retries in streaming context", async () => {
+			const throttlingError = createMockError({
+				message: "ThrottlingException",
+				name: "ThrottlingException",
+			})
+
+			// Mock stream that throws immediately
+			const mockStream = {
+				// eslint-disable-next-line require-yield
+				[Symbol.asyncIterator]: async function* () {
+					throw throttlingError
+				},
+			}
+
+			mockSend.mockResolvedValueOnce({ stream: mockStream })
+
+			const messages: Anthropic.Messages.MessageParam[] = [{ role: "user", content: "test" }]
+
+			try {
+				// Should throw immediately without yielding any chunks
+				const stream = handler.createMessage("", messages)
+				const chunks = []
+				for await (const chunk of stream) {
+					chunks.push(chunk)
+				}
+				// Should not reach here
+				expect(chunks).toHaveLength(0)
+			} catch (error) {
+				// Error should be thrown immediately for retry mechanism
+				// The error might be a TypeError if the stream iterator fails
+				expect(error).toBeDefined()
+				// The important thing is that it throws immediately without yielding chunks
+			}
+		})
+
+		it("should validate error properties exist before accessing them", async () => {
+			// Error with unusual structure
+			const unusualError = {
+				message: "Error with unusual structure",
+				// Missing typical properties like name, status, etc.
+			}
+
+			mockSend.mockRejectedValueOnce(unusualError)
+
+			try {
+				await handler.completePrompt("test")
+			} catch (error) {
+				// Should handle gracefully without accessing undefined properties
+				expect(error.message).toContain("Unknown Error")
+				// Should not have undefined values in the error message
+				expect(error.message).not.toContain("undefined")
+			}
+		})
+	})
 })

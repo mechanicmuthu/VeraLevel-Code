@@ -566,6 +566,8 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 
 			// For throttling errors, throw immediately without yielding chunks
 			// This allows the retry mechanism in attemptApiRequest() to catch and handle it
+			// The retry logic in Task.ts (around line 1817) expects errors to be thrown
+			// on the first chunk for proper exponential backoff behavior
 			if (errorType === "THROTTLING") {
 				if (error instanceof Error) {
 					throw error
@@ -587,10 +589,16 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 				const enhancedError = new Error(enhancedErrorMessage)
 				// Preserve important properties from the original error
 				enhancedError.name = error.name
-				if ((error as any).status) {
+				// Validate and preserve status property
+				if ("status" in error && typeof (error as any).status === "number") {
 					;(enhancedError as any).status = (error as any).status
 				}
-				if ((error as any).$metadata) {
+				// Validate and preserve $metadata property
+				if (
+					"$metadata" in error &&
+					typeof (error as any).$metadata === "object" &&
+					(error as any).$metadata !== null
+				) {
 					;(enhancedError as any).$metadata = (error as any).$metadata
 				}
 				throw enhancedError
@@ -667,10 +675,16 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			if (error instanceof Error) {
 				// Preserve important properties from the original error
 				enhancedError.name = error.name
-				if ((error as any).status) {
+				// Validate and preserve status property
+				if ("status" in error && typeof (error as any).status === "number") {
 					;(enhancedError as any).status = (error as any).status
 				}
-				if ((error as any).$metadata) {
+				// Validate and preserve $metadata property
+				if (
+					"$metadata" in error &&
+					typeof (error as any).$metadata === "object" &&
+					(error as any).$metadata !== null
+				) {
 					;(enhancedError as any).$metadata = (error as any).$metadata
 				}
 			}
@@ -1075,7 +1089,7 @@ Please verify:
 				"throttl",
 				"rate",
 				"limit",
-				"unable to process your request",
+				"bedrock is unable to process your request", // AWS Bedrock specific message
 				"please wait",
 				"quota exceeded",
 				"service unavailable",
@@ -1084,7 +1098,6 @@ Please verify:
 				"too many requests",
 				"request limit",
 				"concurrent requests",
-				"bedrock is unable to process your request",
 			],
 			messageTemplate: `Request was throttled or rate limited. Please try:
 1. Reducing the frequency of requests
@@ -1292,9 +1305,17 @@ Please check:
 				errorMeta.push(`CloudFront ID: ${(error as any).$metadata.cfId}`)
 			}
 
-			// Build error code display
-			templateVars.errorCodes = errorCodes.length > 0 ? `[${errorCodes.join(", ")}]` : ""
-			templateVars.errorMetadata = errorMeta.length > 0 ? `\n\nDebug Info:\n${errorMeta.join("\n")}` : ""
+			// Build error code display - only include verbose details if enabled
+			const verboseErrorsEnabled = this.options.awsBedrockVerboseErrors ?? true // Default to true for backward compatibility
+
+			if (verboseErrorsEnabled) {
+				templateVars.errorCodes = errorCodes.length > 0 ? `[${errorCodes.join(", ")}]` : ""
+				templateVars.errorMetadata = errorMeta.length > 0 ? `\n\nDebug Info:\n${errorMeta.join("\n")}` : ""
+			} else {
+				// In non-verbose mode, only include essential error codes
+				templateVars.errorCodes = ""
+				templateVars.errorMetadata = ""
+			}
 
 			// Format error details
 			const errorDetails: Record<string, any> = {}
@@ -1305,27 +1326,32 @@ Please check:
 			})
 
 			// Safely stringify error details to avoid circular references
-			templateVars.formattedErrorDetails = Object.entries(errorDetails)
-				.map(([key, value]) => {
-					let valueStr
-					if (typeof value === "object" && value !== null) {
-						try {
-							// Use a replacer function to handle circular references
-							valueStr = JSON.stringify(value, (k, v) => {
-								if (k && typeof v === "object" && v !== null) {
-									return "[Object]"
-								}
-								return v
-							})
-						} catch (e) {
-							valueStr = "[Complex Object]"
+			if (verboseErrorsEnabled) {
+				templateVars.formattedErrorDetails = Object.entries(errorDetails)
+					.map(([key, value]) => {
+						let valueStr
+						if (typeof value === "object" && value !== null) {
+							try {
+								// Use a replacer function to handle circular references
+								valueStr = JSON.stringify(value, (k, v) => {
+									if (k && typeof v === "object" && v !== null) {
+										return "[Object]"
+									}
+									return v
+								})
+							} catch (e) {
+								valueStr = "[Complex Object]"
+							}
+						} else {
+							valueStr = String(value)
 						}
-					} else {
-						valueStr = String(value)
-					}
-					return `- ${key}: ${valueStr}`
-				})
-				.join("\n")
+						return `- ${key}: ${valueStr}`
+					})
+					.join("\n")
+			} else {
+				// In non-verbose mode, only include the error message
+				templateVars.formattedErrorDetails = ""
+			}
 		}
 
 		// Add context-specific template variables
