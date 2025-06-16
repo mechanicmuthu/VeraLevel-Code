@@ -1,0 +1,84 @@
+name: Marketplace Submission Handler
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  handle-marketplace-submission:
+    if: contains(github.event.issue.labels.*.name, 'marketplace')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check if this is a new MCP server or mode suggestion
+        id: check-submission
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+            
+            // Check if this is a suggestion for new MCP server or mode
+            const isMcpSuggestion = body.includes('Suggestion for new MCP server');
+            const isModeSuggestion = body.includes('Suggestion for new custom mode');
+            
+            if (isMcpSuggestion || isModeSuggestion) {
+              // Add marketplace-submission label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['marketplace-submission']
+              });
+              
+              // Add comment with submission guidelines
+              const submissionType = isMcpSuggestion ? 'MCP server' : 'custom mode';
+              const comment = `Thank you for suggesting a new ${submissionType} for the Roo Code marketplace! 🎉
+
+## Next Steps
+
+Your submission will be reviewed by the Roo Code team. Here's what happens next:
+
+1. **Initial Review**: We'll check that your submission meets our basic requirements
+2. **Technical Review**: We'll evaluate the code quality, security, and functionality
+3. **Documentation Review**: We'll ensure the documentation is clear and complete
+4. **Community Feedback**: We may ask for community input on the submission
+5. **Approval**: Once approved, your item will be added to the marketplace
+
+## What You Can Do
+
+While we review your submission:
+- Ensure your repository has clear documentation
+- Make sure your code follows security best practices
+- Consider adding examples or demos
+- Be responsive to any feedback or questions
+
+## Resources
+
+- [Marketplace Submission Guidelines](https://github.com/RooCodeInc/Roo-Code/blob/main/docs/marketplace-submissions.md)
+- [Join our Discord](https://discord.gg/roocode) for questions and community support
+
+We appreciate your contribution to the Roo Code ecosystem! 🚀`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: comment
+              });
+              
+              return true;
+            }
+            
+            return false;
+
+      - name: Notify team about new submission
+        if: steps.check-submission.outputs.result == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            
+            // Create a project card or notification for the team
+            // This could be extended to integrate with project management tools
+            console.log(`New marketplace submission: ${issue.title} (#${issue.number})`);

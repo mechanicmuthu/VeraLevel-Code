@@ -164,6 +164,30 @@ We use [changesets](https://github.com/changesets/changesets) for versioning and
 
 ---
 
+## Marketplace Contributions
+
+Roo Code features an experimental marketplace where you can discover and install community-created MCP servers and custom modes. We welcome contributions to expand the marketplace ecosystem!
+
+### Submit Your MCP Server or Mode
+
+Have you created an MCP server or custom mode that could benefit the community? We'd love to consider it for the marketplace!
+
+**How to Submit:**
+
+1. Create a [Marketplace Feedback issue](https://github.com/RooCodeInc/Roo-Code/issues/new/choose) using the marketplace template
+2. Select "Suggestion for new MCP server" or "Suggestion for new custom mode"
+3. Provide all required information about your submission
+4. Wait for our team to review your submission
+
+**Requirements:**
+
+- Open-source and publicly available
+- Clear documentation and setup instructions
+- Follows security best practices
+- Provides value to the Roo Code community
+
+For detailed guidelines, see our [Marketplace Submission Guide](docs/marketplace-submissions.md).
+
 ## Contributing
 
 We love community contributions! Get started by reading our [CONTRIBUTING.md](CONTRIBUTING.md).

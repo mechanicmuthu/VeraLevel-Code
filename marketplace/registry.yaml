@@ -1,0 +1,42 @@
+# Roo Code Marketplace Registry
+# This file tracks approved marketplace items for the Roo Code marketplace
+# Items listed here have been reviewed and approved by the Roo Code team
+
+metadata:
+  version: "1.0.0"
+  lastUpdated: "2025-06-16"
+  description: "Registry of approved marketplace items for Roo Code"
+
+mcpServers:
+  - id: "daft-ie-mcp"
+    name: "Daft.ie MCP Server"
+    description: "MCP server for searching rental properties on Daft.ie (Irish rental website)"
+    author: "Amine Remache"
+    authorUrl: "https://github.com/amineremache"
+    url: "https://github.com/amineremache/daft-ie-mcp"
+    tags: ["real-estate", "rental", "ireland", "property-search"]
+    status: "pending-review"
+    submissionIssue: 4756
+    submissionDate: "2025-06-16"
+    prerequisites:
+      - "Node.js 18 or higher"
+      - "npm or yarn package manager"
+    content: |
+      {
+        "mcpServers": {
+          "daft-ie": {
+            "command": "npx",
+            "args": ["daft-ie-mcp"],
+            "env": {}
+          }
+        }
+      }
+
+customModes: []
+
+# Status values:
+# - pending-review: Submitted but not yet reviewed
+# - under-review: Currently being reviewed by the team
+# - approved: Approved and ready for marketplace
+# - rejected: Rejected with feedback
+# - archived: No longer maintained or deprecated
