@@ -43,7 +43,7 @@ export type GroupEntry = z.infer<typeof groupEntrySchema>
  */
 
 export const contextOverflowContingencySchema = z.object({
-	enabled: z.boolean().default(false),
+	enabled: z.boolean(),
 	message: z.string().optional(),
 	toolSpecific: z.record(z.string(), z.string()).optional(), // tool name -> custom message
 })
