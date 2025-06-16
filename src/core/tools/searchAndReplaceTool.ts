@@ -159,7 +159,7 @@ export async function searchAndReplaceTool(
 			return
 		}
 
-		// Create search pattern and perform replacement
+		// Create search pattern for counting matches
 		const flags = ignoreCase ? "gi" : "g"
 		const searchPattern = useRegex ? new RegExp(validSearch, flags) : new RegExp(escapeRegExp(validSearch), flags)
 
@@ -176,13 +176,52 @@ export async function searchAndReplaceTool(
 
 			// Get and modify target section
 			const targetContent = lines.slice(start, end + 1).join("\n")
+
+			// Check for multiple matches in the target section
+			const matches = targetContent.match(searchPattern)
+			if (matches && matches.length > 1) {
+				cline.consecutiveMistakeCount++
+				cline.recordToolError("search_and_replace")
+				const formattedError = formatResponse.toolError(
+					`Search query matches ${matches.length} locations in the specified line range (${startLine}-${endLine}). ` +
+						`This could lead to unintended replacements.\n\n` +
+						`Please provide a more specific search query that matches only one location, or use the apply_diff tool with line numbers for precise targeting.\n\n` +
+						`Matched content:\n${matches.map((match, i) => `${i + 1}. "${match}"`).join("\n")}`,
+				)
+				await cline.say("error", formattedError)
+				pushToolResult(formattedError)
+				return
+			}
+
 			const modifiedContent = targetContent.replace(searchPattern, validReplace)
 			const modifiedLines = modifiedContent.split("\n")
 
 			// Reconstruct full content
 			newContent = [...beforeLines, ...modifiedLines, ...afterLines].join("\n")
 		} else {
-			// Global replacement
+			// Check for multiple matches in the entire file
+			const matches = fileContent.match(searchPattern)
+			if (matches && matches.length > 1) {
+				cline.consecutiveMistakeCount++
+				cline.recordToolError("search_and_replace")
+				const formattedError = formatResponse.toolError(
+					`Search query matches ${matches.length} locations in the file. ` +
+						`This could lead to unintended replacements.\n\n` +
+						`Please provide a more specific search query that matches only one location, ` +
+						`use line range parameters (start_line/end_line) to limit the search scope, ` +
+						`or use the apply_diff tool with line numbers for precise targeting.\n\n` +
+						`Matched content:\n${matches
+							.slice(0, 10)
+							.map((match, i) => `${i + 1}. "${match}"`)
+							.join("\n")}` +
+						`${matches.length > 10 ? `\n... and ${matches.length - 10} more matches` : ""}`,
+				)
+				await cline.say("error", formattedError)
+				pushToolResult(formattedError)
+				return
+			}
+
+			// Global replacement (only if single match)
 			newContent = fileContent.replace(searchPattern, validReplace)
 		}
 
