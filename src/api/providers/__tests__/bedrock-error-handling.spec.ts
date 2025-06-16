@@ -242,8 +242,12 @@ describe("AwsBedrockHandler Error Handling", () => {
 			})
 
 			const mockStream = {
-				async *[Symbol.asyncIterator]() {
-					throw throttleError
+				[Symbol.asyncIterator]() {
+					return {
+						async next() {
+							throw throttleError
+						},
+					}
 				},
 			}
 
@@ -267,8 +271,12 @@ describe("AwsBedrockHandler Error Handling", () => {
 			})
 
 			const mockStream = {
-				async *[Symbol.asyncIterator]() {
-					throw genericError
+				[Symbol.asyncIterator]() {
+					return {
+						async next() {
+							throw genericError
+						},
+					}
 				},
 			}
 
