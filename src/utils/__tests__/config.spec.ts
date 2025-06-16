@@ -1,151 +1,181 @@
-import { vitest, describe, it, expect, beforeEach, afterAll } from "vitest"
-import { injectEnv, injectVariables } from "../config"
+import { describe, it, expect, beforeEach, vi } from "vitest"
+import * as vscode from "vscode"
+import * as path from "path"
+import * as os from "os"
+import { injectVariables } from "../config"
 
-
-describe("injectEnv", () => {
-	const originalEnv = process.env
-
-	beforeEach(() => {
-		// Assign a new / reset process.env before each test
-		vitest.resetModules()
-		process.env = { ...originalEnv }
-	})
-
-	afterAll(() => {
-		// Restore original process.env after all tests
-		process.env = originalEnv
-	})
-
-	it("should replace env variables in a string", async () => {
-		process.env.TEST_VAR = "testValue"
-		const configString = "Hello ${env:TEST_VAR}"
-		const expectedString = "Hello testValue"
-		const result = await injectEnv(configString)
-		expect(result).toBe(expectedString)
-	})
-
-	it("should replace env variables in an object", async () => {
-		process.env.API_KEY = "12345"
-		process.env.ENDPOINT = "https://example.com"
-		const configObject = {
-			key: "${env:API_KEY}",
-			url: "${env:ENDPOINT}",
-			nested: {
-				string: "Keep this ${env:API_KEY}",
-				number: 123,
-				boolean: true,
-				stringArr: ["${env:API_KEY}", "${env:ENDPOINT}"],
-				numberArr: [123, 456],
-				booleanArr: [true, false],
-			},
-			deeply: {
-				nested: {
-					string: "Keep this ${env:API_KEY}",
-					number: 123,
-					boolean: true,
-					stringArr: ["${env:API_KEY}", "${env:ENDPOINT}"],
-					numberArr: [123, 456],
-					booleanArr: [true, false],
+// Mock vscode module
+vi.mock("vscode", () => ({
+	workspace: {
+		workspaceFolders: [
+			{
+				uri: {
+					fsPath: "/test/workspace",
 				},
 			},
-		}
-		const expectedObject = {
-			key: "12345",
-			url: "https://example.com",
-			nested: {
-				string: "Keep this 12345",
-				number: 123,
-				boolean: true,
-				stringArr: ["12345", "https://example.com"],
-				numberArr: [123, 456],
-				booleanArr: [true, false],
-			},
-			deeply: {
-				nested: {
-					string: "Keep this 12345",
-					number: 123,
-					boolean: true,
-					stringArr: ["12345", "https://example.com"],
-					numberArr: [123, 456],
-					booleanArr: [true, false],
+		],
+		getWorkspaceFolder: vi.fn(),
+	},
+	window: {
+		activeTextEditor: {
+			document: {
+				uri: {
+					fsPath: "/test/workspace/src/test.ts",
 				},
 			},
-		}
-		const result = await injectEnv(configObject)
-		expect(result).toEqual(expectedObject)
-	})
-
-	it("should use notFoundValue for missing env variables", async () => {
-		const consoleWarnSpy = vitest.spyOn(console, "warn").mockImplementation(() => {})
-		process.env.EXISTING_VAR = "exists"
-		const configString = "Value: ${env:EXISTING_VAR}, Missing: ${env:MISSING_VAR}"
-		const expectedString = "Value: exists, Missing: NOT_FOUND"
-		const result = await injectEnv(configString, "NOT_FOUND")
-		expect(result).toBe(expectedString)
-		expect(consoleWarnSpy).toHaveBeenCalledWith(
-			`[injectVariables] variable "MISSING_VAR" referenced but not found in "env"`,
-		)
-		consoleWarnSpy.mockRestore()
-	})
-
-	it("should use default empty string for missing env variables if notFoundValue is not provided", async () => {
-		const consoleWarnSpy = vitest.spyOn(console, "warn").mockImplementation(() => {})
-		const configString = "Missing: ${env:ANOTHER_MISSING}"
-		const expectedString = "Missing: "
-		const result = await injectEnv(configString)
-		expect(result).toBe(expectedString)
-		expect(consoleWarnSpy).toHaveBeenCalledWith(
-			`[injectVariables] variable "ANOTHER_MISSING" referenced but not found in "env"`,
-		)
-		consoleWarnSpy.mockRestore()
-	})
-
-	it("should handle strings without env variables", async () => {
-		const configString = "Just a regular string"
-		const result = await injectEnv(configString)
-		expect(result).toBe(configString)
-	})
-
-	it("should handle objects without env variables", async () => {
-		const configObject = { key: "value", number: 123 }
-		const result = await injectEnv(configObject)
-		expect(result).toEqual(configObject)
-	})
-
-	it("should not mutate the original object", async () => {
-		process.env.MUTATE_TEST = "mutated"
-		const originalObject = { value: "${env:MUTATE_TEST}" }
-		const copyOfOriginal = { ...originalObject } // Shallow copy for comparison
-		await injectEnv(originalObject)
-		expect(originalObject).toEqual(copyOfOriginal) // Check if the original object remains unchanged
-	})
-
-	it("should handle empty string input", async () => {
-		const result = await injectEnv("")
-		expect(result).toBe("")
-	})
-
-	it("should handle empty object input", async () => {
-		const result = await injectEnv({})
-		expect(result).toEqual({})
-	})
-})
+		},
+	},
+}))
 
 describe("injectVariables", () => {
-	it("should replace singular variable", async () => {
-		const result = await injectVariables("Hello ${v}", { v: "Hola" })
-		expect(result).toEqual("Hello Hola")
+	beforeEach(() => {
+		vi.clearAllMocks()
+
+		// Setup workspace folder mock
+		const mockWorkspaceFolder = {
+			uri: { fsPath: "/test/workspace" },
+		}
+		;(vscode.workspace.getWorkspaceFolder as any).mockReturnValue(mockWorkspaceFolder)
 	})
 
-	it("should handle undefined singular variable input", async () => {
-		const result = await injectVariables("Hello ${v}", { v: undefined })
-		expect(result).toEqual("Hello ${v}")
+	it("should resolve workspaceFolder variable", async () => {
+		const config = {
+			command: "node",
+			args: ["${workspaceFolder}/server.js"],
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.args[0]).toBe("/test/workspace/server.js")
 	})
 
-	it("should handle empty string singular variable input", async () => {
-		const result = await injectVariables("Hello ${v}", { v: "" })
-		expect(result).toEqual("Hello ")
+	it("should resolve fileWorkspaceFolder variable", async () => {
+		const config = {
+			command: "node",
+			args: ["${fileWorkspaceFolder}/server.js"],
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.args[0]).toBe("/test/workspace/server.js")
 	})
 
-	// Variable maps are already tested by `injectEnv` tests above.
+	it("should resolve workspaceFolderBasename variable", async () => {
+		const config = {
+			name: "${workspaceFolderBasename}-server",
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.name).toBe("workspace-server")
+	})
+
+	it("should resolve userHome variable", async () => {
+		const config = {
+			path: "${userHome}/.config/app",
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.path).toBe(`${os.homedir()}/.config/app`)
+	})
+
+	it("should resolve pathSeparator variable", async () => {
+		const config = {
+			path: "folder${pathSeparator}file.txt",
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.path).toBe(`folder${path.sep}file.txt`)
+	})
+
+	it("should resolve file variables when active editor exists", async () => {
+		const config = {
+			file: "${file}",
+			basename: "${fileBasename}",
+			dirname: "${fileDirname}",
+			extension: "${fileExtname}",
+			basenameNoExt: "${fileBasenameNoExtension}",
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.file).toBe("/test/workspace/src/test.ts")
+		expect(result.basename).toBe("test.ts")
+		expect(result.dirname).toBe("/test/workspace/src")
+		expect(result.extension).toBe(".ts")
+		expect(result.basenameNoExt).toBe("test")
+	})
+
+	it("should handle environment variables with env: prefix", async () => {
+		const config = {
+			path: "${env:HOME}/config",
+		}
+
+		const result = await injectVariables(config, {
+			env: { HOME: "/home/user" },
+		})
+
+		expect(result.path).toBe("/home/user/config")
+	})
+
+	it("should prioritize custom variables over VS Code variables", async () => {
+		const config = {
+			path: "${workspaceFolder}/custom",
+		}
+
+		const result = await injectVariables(config, {
+			workspaceFolder: "/custom/workspace",
+		})
+
+		expect(result.path).toBe("/custom/workspace/custom")
+	})
+
+	it("should handle multiple variables in the same string", async () => {
+		const config = {
+			command: "node",
+			args: ["${workspaceFolder}/node_modules/.bin/server", "--config", "${userHome}/.config/app.json"],
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.args[0]).toBe("/test/workspace/node_modules/.bin/server")
+		expect(result.args[2]).toBe(`${os.homedir()}/.config/app.json`)
+	})
+
+	it("should handle nested object structures", async () => {
+		const config = {
+			server: {
+				command: "node",
+				args: ["${workspaceFolder}/server.js"],
+				env: {
+					CONFIG_PATH: "${userHome}/.config",
+				},
+			},
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.server.args[0]).toBe("/test/workspace/server.js")
+		expect(result.server.env.CONFIG_PATH).toBe(`${os.homedir()}/.config`)
+	})
+
+	it("should leave unresolved variables unchanged", async () => {
+		const config = {
+			path: "${unknownVariable}/file.txt",
+		}
+
+		const result = await injectVariables(config, {})
+
+		expect(result.path).toBe("${unknownVariable}/file.txt")
+	})
+
+	it("should handle string configs", async () => {
+		const config = "${workspaceFolder}/server.js"
+
+		const result = await injectVariables(config, {})
+
+		expect(result).toBe("/test/workspace/server.js")
+	})
 })
