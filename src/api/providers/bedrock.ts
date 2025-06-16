@@ -561,7 +561,20 @@ export class AwsBedrockHandler extends BaseProvider implements SingleCompletionH
 			// Clear timeout on error
 			clearTimeout(timeoutId)
 
-			// Use the extracted error handling method for all errors
+			// Check if this is a throttling error that should trigger retry logic
+			const errorType = this.getErrorType(error)
+
+			// For throttling errors, throw immediately without yielding chunks
+			// This allows the retry mechanism in attemptApiRequest() to catch and handle it
+			if (errorType === "THROTTLING") {
+				if (error instanceof Error) {
+					throw error
+				} else {
+					throw new Error("Throttling error occurred")
+				}
+			}
+
+			// For non-throttling errors, use the standard error handling with chunks
 			const errorChunks = this.handleBedrockError(error, true) // true for streaming context
 			// Yield each chunk individually to ensure type compatibility
 			for (const chunk of errorChunks) {
@@ -1035,7 +1048,21 @@ Please verify:
 			logLevel: "error",
 		},
 		THROTTLING: {
-			patterns: ["throttl", "rate", "limit"],
+			patterns: [
+				"throttl",
+				"rate",
+				"limit",
+				"unable to process your request",
+				"please wait",
+				"quota exceeded",
+				"service unavailable",
+				"busy",
+				"overloaded",
+				"too many requests",
+				"request limit",
+				"concurrent requests",
+				"bedrock is unable to process your request",
+			],
 			messageTemplate: `Request was throttled or rate limited. Please try:
 1. Reducing the frequency of requests
 2. If using a provisioned model, check its throughput settings
@@ -1047,7 +1074,7 @@ Please verify:
 			logLevel: "error",
 		},
 		TOO_MANY_TOKENS: {
-			patterns: ["too many tokens"],
+			patterns: ["too many tokens", "token limit exceeded", "context length", "maximum context length"],
 			messageTemplate: `"Too many tokens" error detected.
 Possible Causes:
 1. Input exceeds model's context window limit
@@ -1061,6 +1088,46 @@ Suggestions:
 3. Use a model with a larger context window
 4. If rate limited, reduce request frequency
 5. Check your Amazon Bedrock quotas and limits`,
+			logLevel: "error",
+		},
+		SERVICE_QUOTA_EXCEEDED: {
+			patterns: ["service quota exceeded", "quota exceeded", "exceeded quota", "limit exceeded"],
+			messageTemplate: `Service quota exceeded. This error indicates you've reached AWS service limits.
+
+Please try:
+1. Contact AWS support to request a quota increase
+2. Reduce request frequency temporarily
+3. Check your AWS Bedrock quotas in the AWS console
+4. Consider using a different model or region with available capacity
+
+{formattedErrorDetails}`,
+			logLevel: "error",
+		},
+		MODEL_NOT_READY: {
+			patterns: ["model not ready", "model is not ready", "provisioned throughput not ready", "model loading"],
+			messageTemplate: `Model is not ready or still loading. This can happen with:
+1. Provisioned throughput models that are still initializing
+2. Custom models that are being loaded
+3. Models that are temporarily unavailable
+
+Please try:
+1. Wait a few minutes and retry
+2. Check the model status in AWS Bedrock console
+3. Verify the model is properly provisioned
+
+{formattedErrorDetails}`,
+			logLevel: "error",
+		},
+		INTERNAL_SERVER_ERROR: {
+			patterns: ["internal server error", "internal error", "server error", "service error"],
+			messageTemplate: `AWS Bedrock internal server error. This is a temporary service issue.
+
+Please try:
+1. Retry the request after a brief delay
+2. If the error persists, check AWS service health
+3. Contact AWS support if the issue continues
+
+{formattedErrorDetails}`,
 			logLevel: "error",
 		},
 		ON_DEMAND_NOT_SUPPORTED: {
@@ -1117,6 +1184,16 @@ Please check:
 	private getErrorType(error: unknown): string {
 		if (!(error instanceof Error)) {
 			return "GENERIC"
+		}
+
+		// Check for HTTP 429 status code (Too Many Requests)
+		if ((error as any).status === 429 || (error as any).$metadata?.httpStatusCode === 429) {
+			return "THROTTLING"
+		}
+
+		// Check for AWS Bedrock specific throttling exception names
+		if ((error as any).name === "ThrottlingException" || (error as any).__type === "ThrottlingException") {
+			return "THROTTLING"
 		}
 
 		const errorMessage = error.message.toLowerCase()
