@@ -158,6 +158,7 @@ export interface WebviewMessage {
 		| "indexCleared"
 		| "codebaseIndexConfig"
 		| "setHistoryPreviewCollapsed"
+		| "hideTaskAndAutoApproveBoxes"
 		| "openExternal"
 		| "filterMarketplaceItems"
 		| "marketplaceButtonClicked"

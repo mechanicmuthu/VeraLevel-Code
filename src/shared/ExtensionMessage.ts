@@ -240,6 +240,7 @@ export type ExtensionState = Pick<
 	renderContext: "sidebar" | "editor"
 	settingsImportedAt?: number
 	historyPreviewCollapsed?: boolean
+	hideTaskAndAutoApproveBoxes?: boolean
 
 	cloudUserInfo: CloudUserInfo | null
 	cloudIsAuthenticated: boolean

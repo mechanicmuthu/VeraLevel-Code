@@ -22,6 +22,7 @@ import {
 	Globe,
 	Info,
 	MessageSquare,
+	Monitor,
 	LucideIcon,
 } from "lucide-react"
 
@@ -88,6 +89,7 @@ const sectionNames = [
 	"prompts",
 	"experimental",
 	"language",
+	"ui",
 	"about",
 ] as const
 
@@ -315,6 +317,10 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			vscode.postMessage({ type: "upsertApiConfiguration", text: currentApiConfigName, apiConfiguration })
 			vscode.postMessage({ type: "telemetrySetting", text: telemetrySetting })
 			vscode.postMessage({ type: "codebaseIndexConfig", values: codebaseIndexConfig })
+			vscode.postMessage({
+				type: "hideTaskAndAutoApproveBoxes",
+				bool: cachedState.hideTaskAndAutoApproveBoxes ?? false,
+			})
 			setChangeDetected(false)
 		}
 	}
@@ -394,6 +400,7 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 			{ id: "prompts", icon: MessageSquare },
 			{ id: "experimental", icon: FlaskConical },
 			{ id: "language", icon: Globe },
+			{ id: "ui", icon: Monitor },
 			{ id: "about", icon: Info },
 		],
 		[], // No dependencies needed now
@@ -690,6 +697,41 @@ const SettingsView = forwardRef<SettingsViewRef, SettingsViewProps>(({ onDone, t
 					{/* Language Section */}
 					{activeTab === "language" && (
 						<LanguageSettings language={language || "en"} setCachedStateField={setCachedStateField} />
+					)}
+
+					{/* UI Section */}
+					{activeTab === "ui" && (
+						<div>
+							<SectionHeader>
+								<div className="flex items-center gap-2">
+									<Monitor className="w-4" />
+									<div>{t("settings:sections.ui")}</div>
+								</div>
+							</SectionHeader>
+
+							<Section>
+								<div className="space-y-4">
+									<div className="flex items-center justify-between">
+										<div className="flex flex-col">
+											<label className="text-vscode-foreground font-medium">
+												{t("settings:ui.hideTaskAndAutoApproveBoxes.title")}
+											</label>
+											<span className="text-vscode-descriptionForeground text-sm">
+												{t("settings:ui.hideTaskAndAutoApproveBoxes.description")}
+											</span>
+										</div>
+										<input
+											type="checkbox"
+											checked={cachedState.hideTaskAndAutoApproveBoxes ?? false}
+											onChange={(e) =>
+												setCachedStateField("hideTaskAndAutoApproveBoxes", e.target.checked)
+											}
+											className="w-4 h-4"
+										/>
+									</div>
+								</div>
+							</Section>
+						</div>
 					)}
 
 					{/* About Section */}

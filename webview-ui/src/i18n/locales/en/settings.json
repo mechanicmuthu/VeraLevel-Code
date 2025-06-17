@@ -31,6 +31,7 @@
 		"prompts": "Prompts",
 		"experimental": "Experimental",
 		"language": "Language",
+		"ui": "User Interface",
 		"about": "About Roo Code"
 	},
 	"prompts": {
@@ -615,5 +616,11 @@
 		"useCustomArn": "Use custom ARN..."
 	},
 	"includeMaxOutputTokens": "Include max output tokens",
-	"includeMaxOutputTokensDescription": "Send max output tokens parameter in API requests. Some providers may not support this."
+	"includeMaxOutputTokensDescription": "Send max output tokens parameter in API requests. Some providers may not support this.",
+	"ui": {
+		"hideTaskAndAutoApproveBoxes": {
+			"label": "Hide Task and Auto-Approve Boxes",
+			"description": "Hide the task header and auto-approve menu to create a cleaner, more minimalistic interface"
+		}
+	}
 }

@@ -25,6 +25,7 @@ import { convertTextMateToHljs } from "@src/utils/textMateToHljs"
 
 export interface ExtensionStateContextType extends ExtensionState {
 	historyPreviewCollapsed?: boolean // Add the new state property
+	hideTaskAndAutoApproveBoxes?: boolean // Add the new state property
 	didHydrateState: boolean
 	showWelcome: boolean
 	theme: any
@@ -113,6 +114,7 @@ export interface ExtensionStateContextType extends ExtensionState {
 	terminalCompressProgressBar?: boolean
 	setTerminalCompressProgressBar: (value: boolean) => void
 	setHistoryPreviewCollapsed: (value: boolean) => void
+	setHideTaskAndAutoApproveBoxes: (value: boolean) => void
 	autoCondenseContext: boolean
 	setAutoCondenseContext: (value: boolean) => void
 	autoCondenseContextPercent: number
@@ -192,6 +194,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		terminalZdotdir: false, // Default ZDOTDIR handling setting
 		terminalCompressProgressBar: true, // Default to compress progress bar output
 		historyPreviewCollapsed: false, // Initialize the new state (default to expanded)
+		hideTaskAndAutoApproveBoxes: false, // Initialize the new state (default to showing boxes)
 		cloudUserInfo: null,
 		cloudIsAuthenticated: false,
 		sharingEnabled: false,
@@ -397,6 +400,8 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 			}),
 		setHistoryPreviewCollapsed: (value) =>
 			setState((prevState) => ({ ...prevState, historyPreviewCollapsed: value })),
+		setHideTaskAndAutoApproveBoxes: (value) =>
+			setState((prevState) => ({ ...prevState, hideTaskAndAutoApproveBoxes: value })),
 		setAutoCondenseContext: (value) => setState((prevState) => ({ ...prevState, autoCondenseContext: value })),
 		setAutoCondenseContextPercent: (value) =>
 			setState((prevState) => ({ ...prevState, autoCondenseContextPercent: value })),

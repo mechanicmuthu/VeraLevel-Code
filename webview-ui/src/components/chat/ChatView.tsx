@@ -93,6 +93,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		telemetrySetting,
 		hasSystemPromptOverride,
 		historyPreviewCollapsed, // Added historyPreviewCollapsed
+		hideTaskAndAutoApproveBoxes, // Added hideTaskAndAutoApproveBoxes
 		soundEnabled,
 		soundVolume,
 	} = useExtensionState()
@@ -1348,19 +1349,21 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			{showAnnouncement && <Announcement hideAnnouncement={hideAnnouncement} />}
 			{task ? (
 				<>
-					<TaskHeader
-						task={task}
-						tokensIn={apiMetrics.totalTokensIn}
-						tokensOut={apiMetrics.totalTokensOut}
-						doesModelSupportPromptCache={model?.supportsPromptCache ?? false}
-						cacheWrites={apiMetrics.totalCacheWrites}
-						cacheReads={apiMetrics.totalCacheReads}
-						totalCost={apiMetrics.totalCost}
-						contextTokens={apiMetrics.contextTokens}
-						buttonsDisabled={sendingDisabled}
-						handleCondenseContext={handleCondenseContext}
-						onClose={handleTaskCloseButtonClick}
-					/>
+					{!hideTaskAndAutoApproveBoxes && (
+						<TaskHeader
+							task={task}
+							tokensIn={apiMetrics.totalTokensIn}
+							tokensOut={apiMetrics.totalTokensOut}
+							doesModelSupportPromptCache={model?.supportsPromptCache ?? false}
+							cacheWrites={apiMetrics.totalCacheWrites}
+							cacheReads={apiMetrics.totalCacheReads}
+							totalCost={apiMetrics.totalCost}
+							contextTokens={apiMetrics.contextTokens}
+							buttonsDisabled={sendingDisabled}
+							handleCondenseContext={handleCondenseContext}
+							onClose={handleTaskCloseButtonClick}
+						/>
+					)}
 
 					{hasSystemPromptOverride && (
 						<div className="px-3">
@@ -1427,7 +1430,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 			//    This ensures it takes its natural height when there's space
 			//    but becomes scrollable when the viewport is too small
 			*/}
-			{!task && (
+			{!task && !hideTaskAndAutoApproveBoxes && (
 				<div className="mb-[-2px] flex-initial min-h-0">
 					<AutoApproveMenu />
 				</div>
@@ -1455,7 +1458,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 							initialTopMostItemIndex={groupedMessages.length - 1}
 						/>
 					</div>
-					<AutoApproveMenu />
+					{!hideTaskAndAutoApproveBoxes && <AutoApproveMenu />}
 					{showScrollToBottom ? (
 						<div className="flex px-[15px] pt-[10px]">
 							<div
