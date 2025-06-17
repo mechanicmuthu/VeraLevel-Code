@@ -385,10 +385,14 @@ describe("QdrantVectorStore", () => {
 
 	describe("upsertPoints", () => {
 		it("should correctly call qdrantClient.upsert with processed points", async () => {
+			// Create vectors with correct dimensions (1536)
+			const mockVector1 = new Array(1536).fill(0).map((_, i) => i / 1536)
+			const mockVector2 = new Array(1536).fill(0).map((_, i) => (i + 100) / 1536)
+
 			const mockPoints = [
 				{
 					id: "test-id-1",
-					vector: [0.1, 0.2, 0.3],
+					vector: mockVector1,
 					payload: {
 						filePath: "src/components/Button.tsx",
 						content: "export const Button = () => {}",
@@ -398,7 +402,7 @@ describe("QdrantVectorStore", () => {
 				},
 				{
 					id: "test-id-2",
-					vector: [0.4, 0.5, 0.6],
+					vector: mockVector2,
 					payload: {
 						filePath: "src/utils/helpers.ts",
 						content: "export function helper() {}",
@@ -417,7 +421,7 @@ describe("QdrantVectorStore", () => {
 				points: [
 					{
 						id: "test-id-1",
-						vector: [0.1, 0.2, 0.3],
+						vector: mockVector1,
 						payload: {
 							filePath: "src/components/Button.tsx",
 							content: "export const Button = () => {}",
@@ -432,7 +436,7 @@ describe("QdrantVectorStore", () => {
 					},
 					{
 						id: "test-id-2",
-						vector: [0.4, 0.5, 0.6],
+						vector: mockVector2,
 						payload: {
 							filePath: "src/utils/helpers.ts",
 							content: "export function helper() {}",
@@ -451,10 +455,11 @@ describe("QdrantVectorStore", () => {
 		})
 
 		it("should handle points without filePath in payload", async () => {
+			const mockVector = new Array(1536).fill(0).map((_, i) => i / 1536)
 			const mockPoints = [
 				{
 					id: "test-id-1",
-					vector: [0.1, 0.2, 0.3],
+					vector: mockVector,
 					payload: {
 						content: "some content without filePath",
 						startLine: 1,
@@ -471,7 +476,7 @@ describe("QdrantVectorStore", () => {
 				points: [
 					{
 						id: "test-id-1",
-						vector: [0.1, 0.2, 0.3],
+						vector: mockVector,
 						payload: {
 							content: "some content without filePath",
 							startLine: 1,
@@ -488,17 +493,16 @@ describe("QdrantVectorStore", () => {
 
 			await vectorStore.upsertPoints([])
 
-			expect(mockQdrantClientInstance.upsert).toHaveBeenCalledWith(expectedCollectionName, {
-				points: [],
-				wait: true,
-			})
+			// Should not call upsert for empty arrays (early return)
+			expect(mockQdrantClientInstance.upsert).not.toHaveBeenCalled()
 		})
 
 		it("should correctly process pathSegments for nested file paths", async () => {
+			const mockVector = new Array(1536).fill(0).map((_, i) => i / 1536)
 			const mockPoints = [
 				{
 					id: "test-id-1",
-					vector: [0.1, 0.2, 0.3],
+					vector: mockVector,
 					payload: {
 						filePath: "src/components/ui/forms/InputField.tsx",
 						content: "export const InputField = () => {}",
@@ -516,7 +520,7 @@ describe("QdrantVectorStore", () => {
 				points: [
 					{
 						id: "test-id-1",
-						vector: [0.1, 0.2, 0.3],
+						vector: mockVector,
 						payload: {
 							filePath: "src/components/ui/forms/InputField.tsx",
 							content: "export const InputField = () => {}",
@@ -537,10 +541,11 @@ describe("QdrantVectorStore", () => {
 		})
 
 		it("should handle error scenarios when qdrantClient.upsert fails", async () => {
+			const mockVector = new Array(1536).fill(0).map((_, i) => i / 1536)
 			const mockPoints = [
 				{
 					id: "test-id-1",
-					vector: [0.1, 0.2, 0.3],
+					vector: mockVector,
 					payload: {
 						filePath: "src/test.ts",
 						content: "test content",
@@ -554,10 +559,19 @@ describe("QdrantVectorStore", () => {
 			mockQdrantClientInstance.upsert.mockRejectedValue(upsertError)
 			vitest.spyOn(console, "error").mockImplementation(() => {})
 
-			await expect(vectorStore.upsertPoints(mockPoints)).rejects.toThrow(upsertError)
+			await expect(vectorStore.upsertPoints(mockPoints)).rejects.toThrow(
+				"Failed to upsert 1 points to collection ws-a1b2c3d4e5f6g7h8: Upsert failed",
+			)
 
 			expect(mockQdrantClientInstance.upsert).toHaveBeenCalledTimes(1)
-			expect(console.error).toHaveBeenCalledWith("Failed to upsert points:", upsertError)
+			expect(console.error).toHaveBeenCalledWith(
+				"Failed to upsert points:",
+				expect.objectContaining({
+					message: "Upsert failed",
+					pointsCount: 1,
+					collectionName: "ws-a1b2c3d4e5f6g7h8",
+				}),
+			)
 			;(console.error as any).mockRestore()
 		})
 	})

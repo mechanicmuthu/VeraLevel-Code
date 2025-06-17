@@ -119,6 +119,32 @@ export class QdrantVectorStore implements IVectorStore {
 	}
 
 	/**
+	 * Validates vector dimensions against the expected collection vector size
+	 * @param vectors Array of vectors to validate
+	 * @returns true if all vectors have correct dimensions
+	 */
+	private validateVectorDimensions(vectors: number[][]): void {
+		for (let i = 0; i < vectors.length; i++) {
+			const vector = vectors[i]
+			if (!Array.isArray(vector)) {
+				throw new Error(`Vector at index ${i} is not an array`)
+			}
+			if (vector.length !== this.vectorSize) {
+				throw new Error(
+					`Vector at index ${i} has incorrect dimensions: expected ${this.vectorSize}, got ${vector.length}`,
+				)
+			}
+			// Check for invalid values (NaN, Infinity)
+			for (let j = 0; j < vector.length; j++) {
+				const value = vector[j]
+				if (typeof value !== "number" || !isFinite(value)) {
+					throw new Error(`Vector at index ${i} contains invalid value at position ${j}: ${value}`)
+				}
+			}
+		}
+	}
+
+	/**
 	 * Upserts points into the vector store
 	 * @param points Array of points to upsert
 	 */
@@ -130,6 +156,34 @@ export class QdrantVectorStore implements IVectorStore {
 		}>,
 	): Promise<void> {
 		try {
+			// Validate input points
+			if (!Array.isArray(points)) {
+				throw new Error("Points must be an array")
+			}
+
+			if (points.length === 0) {
+				return // Nothing to upsert
+			}
+
+			// Validate each point structure and collect vectors for dimension validation
+			const vectors: number[][] = []
+			for (let i = 0; i < points.length; i++) {
+				const point = points[i]
+				if (!point.id || typeof point.id !== "string") {
+					throw new Error(`Point at index ${i} must have a valid string id`)
+				}
+				if (!Array.isArray(point.vector) || point.vector.length === 0) {
+					throw new Error(`Point at index ${i} must have a valid vector array`)
+				}
+				if (!point.payload || typeof point.payload !== "object") {
+					throw new Error(`Point at index ${i} must have a valid payload object`)
+				}
+				vectors.push(point.vector)
+			}
+
+			// Validate vector dimensions
+			this.validateVectorDimensions(vectors)
+
 			const processedPoints = points.map((point) => {
 				if (point.payload?.filePath) {
 					const segments = point.payload.filePath.split(path.sep).filter(Boolean)
@@ -141,23 +195,50 @@ export class QdrantVectorStore implements IVectorStore {
 						{},
 					)
 					return {
-						...point,
+						id: point.id,
+						vector: point.vector,
 						payload: {
 							...point.payload,
 							pathSegments,
 						},
 					}
 				}
-				return point
+				return {
+					id: point.id,
+					vector: point.vector,
+					payload: point.payload,
+				}
 			})
 
-			await this.client.upsert(this.collectionName, {
+			// Use the batch upsert operation with proper error handling
+			const upsertRequest = {
 				points: processedPoints,
 				wait: true,
-			})
-		} catch (error) {
-			console.error("Failed to upsert points:", error)
-			throw error
+			}
+
+			await this.client.upsert(this.collectionName, upsertRequest)
+		} catch (error: any) {
+			// Enhanced error logging to help debug the "Bad Request" issue
+			const errorMessage = error?.message || error?.toString() || "Unknown error"
+			const errorDetails = {
+				message: errorMessage,
+				status: error?.status || error?.response?.status,
+				statusText: error?.statusText || error?.response?.statusText,
+				data: error?.data || error?.response?.data,
+				pointsCount: points.length,
+				collectionName: this.collectionName,
+				vectorSize: this.vectorSize,
+				sampleVectorLengths: points.slice(0, 3).map((p) => p.vector?.length || "undefined"),
+			}
+
+			console.error("Failed to upsert points:", errorDetails)
+
+			// Re-throw with more context
+			const enhancedError = new Error(
+				`Failed to upsert ${points.length} points to collection ${this.collectionName}: ${errorMessage}`,
+			)
+			enhancedError.cause = error
+			throw enhancedError
 		}
 	}
 

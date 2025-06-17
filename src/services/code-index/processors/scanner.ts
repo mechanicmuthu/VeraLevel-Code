@@ -325,10 +325,24 @@ export class DirectoryScanner implements IDirectoryScanner {
 				success = true
 			} catch (error) {
 				lastError = error as Error
-				console.error(`[DirectoryScanner] Error processing batch (attempt ${attempts}):`, error)
+				const errorMessage = error instanceof Error ? error.message : String(error)
+				const batchInfo = {
+					batchSize: batchBlocks.length,
+					attempt: attempts,
+					maxRetries: MAX_BATCH_RETRIES,
+					fileCount: batchFileInfos.length,
+					sampleFiles: batchFileInfos.slice(0, 3).map((info) => info.filePath),
+				}
+
+				console.error(`[DirectoryScanner] Error processing batch (attempt ${attempts}/${MAX_BATCH_RETRIES}):`, {
+					error: errorMessage,
+					batchInfo,
+					originalError: error,
+				})
 
 				if (attempts < MAX_BATCH_RETRIES) {
 					const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempts - 1)
+					console.log(`[DirectoryScanner] Retrying batch in ${delay}ms...`)
 					await new Promise((resolve) => setTimeout(resolve, delay))
 				}
 			}
