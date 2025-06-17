@@ -11,6 +11,7 @@ import { formatResponse } from "../../core/prompts/responses"
 import { diagnosticsToProblemsString, getNewDiagnostics } from "../diagnostics"
 import { ClineSayTool } from "../../shared/ExtensionMessage"
 import { Task } from "../../core/task/Task"
+import { EXPERIMENT_IDS, experiments } from "../../shared/experiments"
 
 import { DecorationController } from "./DecorationController"
 
@@ -33,8 +34,14 @@ export class DiffViewProvider {
 	private activeLineController?: DecorationController
 	private streamedLines: string[] = []
 	private preDiagnostics: [vscode.Uri, vscode.Diagnostic[]][] = []
+	private provider?: any // Reference to ClineProvider for accessing experiments
 
-	constructor(private cwd: string) {}
+	constructor(
+		private cwd: string,
+		provider?: any,
+	) {
+		this.provider = provider
+	}
 
 	async open(relPath: string): Promise<void> {
 		this.relPath = relPath
@@ -410,6 +417,39 @@ export class DiffViewProvider {
 		}
 
 		const uri = vscode.Uri.file(path.resolve(this.cwd, this.relPath))
+
+		// Check if focus disruption prevention is enabled
+		let preventFocusDisruption = false
+		if (this.provider) {
+			try {
+				const state = await this.provider.getState()
+				preventFocusDisruption = experiments.isEnabled(
+					state.experiments ?? {},
+					EXPERIMENT_IDS.PREVENT_FOCUS_DISRUPTION,
+				)
+			} catch (error) {
+				// If we can't get the state, default to false (current behavior)
+				preventFocusDisruption = false
+			}
+		}
+
+		// If focus disruption prevention is enabled, skip opening the diff view
+		// and just open the file directly for editing
+		if (preventFocusDisruption) {
+			// Create the file if it doesn't exist
+			const fileExists = this.editType === "modify"
+			if (!fileExists) {
+				await fs.writeFile(uri.fsPath, this.originalContent ?? "")
+			}
+
+			// Open the file in the background without stealing focus
+			const document = await vscode.workspace.openTextDocument(uri)
+			const editor = await vscode.window.showTextDocument(document, {
+				preserveFocus: true,
+				preview: false,
+			})
+			return editor
+		}
 
 		// If this diff editor is already open (ie if a previous write file was
 		// interrupted) then we should activate that instead of opening a new

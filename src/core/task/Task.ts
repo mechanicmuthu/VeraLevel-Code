@@ -242,7 +242,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.consecutiveMistakeLimit = consecutiveMistakeLimit
 		this.providerRef = new WeakRef(provider)
 		this.globalStoragePath = provider.context.globalStorageUri.fsPath
-		this.diffViewProvider = new DiffViewProvider(this.cwd)
+		this.diffViewProvider = new DiffViewProvider(this.cwd, provider)
 		this.enableCheckpoints = enableCheckpoints
 
 		this.rootTask = rootTask
