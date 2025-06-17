@@ -51,6 +51,7 @@ import { MarketplaceManager } from "../../services/marketplace"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
 import { CodeIndexManager } from "../../services/code-index/manager"
 import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
+import { MdmService } from "../../services/mdm/MdmService"
 import { fileExistsAtPath } from "../../utils/fs"
 import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 import { ContextProxy } from "../config/ContextProxy"
@@ -103,6 +104,7 @@ export class ClineProvider
 	}
 	protected mcpHub?: McpHub // Change from private to protected
 	private marketplaceManager: MarketplaceManager
+	private mdmService?: MdmService
 
 	public isViewLaunched = false
 	public settingsImportedAt?: number
@@ -116,6 +118,7 @@ export class ClineProvider
 		private readonly renderContext: "sidebar" | "editor" = "sidebar",
 		public readonly contextProxy: ContextProxy,
 		public readonly codeIndexManager?: CodeIndexManager,
+		mdmService?: MdmService,
 	) {
 		super()
 
@@ -123,6 +126,7 @@ export class ClineProvider
 		ClineProvider.activeInstances.add(this)
 
 		this.codeIndexManager = codeIndexManager
+		this.mdmService = mdmService
 		this.updateGlobalState("codebaseIndexModels", EMBEDDING_MODEL_PROFILES)
 
 		// Start configuration loading (which might trigger indexing) in the background.
@@ -1249,6 +1253,11 @@ export class ClineProvider
 
 		// Update VSCode context for experiments
 		await this.updateVSCodeContext()
+
+		// Check MDM compliance and send user to account tab if not compliant
+		if (!this.checkMdmCompliance()) {
+			await this.postMessageToWebview({ type: "action", action: "accountButtonClicked" })
+		}
 	}
 
 	/**
@@ -1463,6 +1472,7 @@ export class ClineProvider
 				codebaseIndexEmbedderBaseUrl: "",
 				codebaseIndexEmbedderModelId: "",
 			},
+			mdmCompliant: this.checkMdmCompliance(),
 		}
 	}
 
@@ -1704,6 +1714,24 @@ export class ClineProvider
 	// Add public getter
 	public getMcpHub(): McpHub | undefined {
 		return this.mcpHub
+	}
+
+	/**
+	 * Check if the current state is compliant with MDM policy
+	 * @returns true if compliant, false if blocked
+	 */
+	public checkMdmCompliance(): boolean {
+		if (!this.mdmService) {
+			return true // No MDM service, allow operation
+		}
+
+		const compliance = this.mdmService.isCompliant()
+
+		if (!compliance.compliant) {
+			return false
+		}
+
+		return true
 	}
 
 	/**
