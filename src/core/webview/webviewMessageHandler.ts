@@ -1575,5 +1575,13 @@ export const webviewMessageHandler = async (
 			}
 			break
 		}
+		case "anthropicOAuthConnect": {
+			await provider.handleAnthropicOAuthConnect(message.uriScheme)
+			break
+		}
+		case "anthropicOAuthDisconnect": {
+			await provider.handleAnthropicOAuthDisconnect()
+			break
+		}
 	}
 }

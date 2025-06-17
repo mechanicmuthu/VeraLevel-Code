@@ -35,6 +35,14 @@ export const handleUri = async (uri: vscode.Uri) => {
 			}
 			break
 		}
+		case "/anthropic/oauth/callback": {
+			const code = query.get("code")
+			const state = query.get("state")
+			if (code && state) {
+				await visibleProvider.handleAnthropicOAuthCallback(code, state)
+			}
+			break
+		}
 		case "/auth/clerk/callback": {
 			const code = query.get("code")
 			const state = query.get("state")

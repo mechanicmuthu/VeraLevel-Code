@@ -25,14 +25,37 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 	constructor(options: ApiHandlerOptions) {
 		super()
 		this.options = options
+		this.client = this.createClient()
+	}
 
-		const apiKeyFieldName =
-			this.options.anthropicBaseUrl && this.options.anthropicUseAuthToken ? "authToken" : "apiKey"
+	private createClient(): Anthropic {
+		// Determine authentication method
+		let authConfig: { apiKey?: string; authToken?: string } = {}
 
-		this.client = new Anthropic({
+		if (this.options.anthropicUseOAuth && this.options.anthropicOAuthAccessToken) {
+			// Use OAuth access token
+			authConfig.authToken = this.options.anthropicOAuthAccessToken
+		} else {
+			// Use API key (existing behavior)
+			const apiKeyFieldName =
+				this.options.anthropicBaseUrl && this.options.anthropicUseAuthToken ? "authToken" : "apiKey"
+			authConfig[apiKeyFieldName] = this.options.apiKey
+		}
+
+		return new Anthropic({
 			baseURL: this.options.anthropicBaseUrl || undefined,
-			[apiKeyFieldName]: this.options.apiKey,
+			...authConfig,
 		})
+	}
+
+	/**
+	 * Update the client with new OAuth token if needed
+	 */
+	public updateOAuthToken(accessToken: string) {
+		if (this.options.anthropicUseOAuth) {
+			this.options.anthropicOAuthAccessToken = accessToken
+			this.client = this.createClient()
+		}
 	}
 
 	async *createMessage(

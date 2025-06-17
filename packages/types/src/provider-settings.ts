@@ -74,6 +74,9 @@ const anthropicSchema = apiModelIdProviderModelSchema.extend({
 	apiKey: z.string().optional(),
 	anthropicBaseUrl: z.string().optional(),
 	anthropicUseAuthToken: z.boolean().optional(),
+	anthropicUseOAuth: z.boolean().optional(),
+	anthropicOAuthConnected: z.boolean().optional(),
+	anthropicOAuthAccessToken: z.string().optional(),
 })
 
 const glamaSchema = baseProviderSettingsSchema.extend({

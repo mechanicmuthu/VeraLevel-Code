@@ -50,6 +50,7 @@ import { McpServerManager } from "../../services/mcp/McpServerManager"
 import { MarketplaceManager } from "../../services/marketplace"
 import { ShadowCheckpointService } from "../../services/checkpoints/ShadowCheckpointService"
 import { CodeIndexManager } from "../../services/code-index/manager"
+import { AnthropicOAuthService } from "../../services/auth/anthropic-oauth"
 import type { IndexProgressUpdate } from "../../services/code-index/interfaces/manager"
 import { fileExistsAtPath } from "../../utils/fs"
 import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
@@ -103,6 +104,7 @@ export class ClineProvider
 	}
 	protected mcpHub?: McpHub // Change from private to protected
 	private marketplaceManager: MarketplaceManager
+	private anthropicOAuthService: AnthropicOAuthService
 
 	public isViewLaunched = false
 	public settingsImportedAt?: number
@@ -151,6 +153,7 @@ export class ClineProvider
 			})
 
 		this.marketplaceManager = new MarketplaceManager(this.context)
+		this.anthropicOAuthService = new AnthropicOAuthService(this.context)
 	}
 
 	// Adds a new Cline instance to clineStack, marking the start of a new task.
@@ -1112,6 +1115,117 @@ export class ClineProvider
 		await this.upsertProviderProfile(currentApiConfigName, newConfiguration)
 	}
 
+	// Anthropic OAuth
+
+	async handleAnthropicOAuthConnect(uriScheme?: string) {
+		try {
+			const { url } = this.anthropicOAuthService.getAuthUrl(uriScheme)
+			await vscode.env.openExternal(vscode.Uri.parse(url))
+		} catch (error) {
+			this.log(`Error initiating Anthropic OAuth: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`)
+			vscode.window.showErrorMessage("Failed to initiate Claude Pro/Max authentication")
+		}
+	}
+
+	/**
+	 * Ensure OAuth token is valid and refresh if necessary
+	 */
+	async ensureValidAnthropicOAuthToken(): Promise<string | null> {
+		if (!this.anthropicOAuthService) {
+			return null
+		}
+
+		try {
+			const validToken = await this.anthropicOAuthService.getValidAccessToken()
+
+			if (validToken) {
+				// Update the current configuration with the fresh token
+				const { apiConfiguration, currentApiConfigName } = await this.getState()
+
+				if (apiConfiguration.anthropicUseOAuth && apiConfiguration.anthropicOAuthAccessToken !== validToken) {
+					const newConfiguration: ProviderSettings = {
+						...apiConfiguration,
+						anthropicOAuthAccessToken: validToken,
+					}
+
+					// Update the configuration silently (don't activate to avoid UI flicker)
+					await this.upsertProviderProfile(currentApiConfigName, newConfiguration, false)
+
+					// Update the current task's API handler if it's using Anthropic
+					const currentTask = this.getCurrentCline()
+					if (currentTask && apiConfiguration.apiProvider === "anthropic") {
+						const { buildApiHandler } = await import("../../api")
+						currentTask.api = buildApiHandler(newConfiguration)
+					}
+				}
+			}
+
+			return validToken
+		} catch (error) {
+			this.log(
+				`Error ensuring valid Anthropic OAuth token: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+			)
+			return null
+		}
+	}
+
+	async handleAnthropicOAuthCallback(code: string, state: string) {
+		try {
+			const tokens = await this.anthropicOAuthService.exchangeCodeForTokens(code, state)
+			await this.anthropicOAuthService.storeTokens(tokens)
+
+			const { apiConfiguration, currentApiConfigName } = await this.getState()
+
+			const newConfiguration: ProviderSettings = {
+				...apiConfiguration,
+				apiProvider: "anthropic",
+				anthropicUseOAuth: true,
+				anthropicOAuthConnected: true,
+				anthropicOAuthAccessToken: tokens.access_token,
+				// Clear API key when using OAuth
+				apiKey: undefined,
+			}
+
+			await this.upsertProviderProfile(currentApiConfigName, newConfiguration)
+			vscode.window.showInformationMessage("Successfully connected to Claude Pro/Max account!")
+		} catch (error) {
+			this.log(
+				`Error handling Anthropic OAuth callback: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+			)
+			vscode.window.showErrorMessage("Failed to connect Claude Pro/Max account")
+		}
+	}
+
+	async handleAnthropicOAuthDisconnect() {
+		try {
+			// Get current tokens to revoke them
+			const tokens = await this.anthropicOAuthService.getStoredTokens()
+			if (tokens) {
+				await this.anthropicOAuthService.revokeTokens(tokens.access_token)
+			}
+
+			// Clear stored tokens
+			await this.anthropicOAuthService.clearTokens()
+
+			const { apiConfiguration, currentApiConfigName } = await this.getState()
+
+			const newConfiguration: ProviderSettings = {
+				...apiConfiguration,
+				anthropicUseOAuth: false,
+				anthropicOAuthConnected: false,
+				anthropicOAuthAccessToken: undefined,
+			}
+
+			await this.upsertProviderProfile(currentApiConfigName, newConfiguration)
+			vscode.window.showInformationMessage("Disconnected from Claude Pro/Max account")
+		} catch (error) {
+			this.log(
+				`Error disconnecting Anthropic OAuth: ${JSON.stringify(error, Object.getOwnPropertyNames(error), 2)}`,
+			)
+			vscode.window.showErrorMessage("Failed to disconnect Claude Pro/Max account")
+		}
+	}
+
 	// Task history
 
 	async getTaskWithId(id: string): Promise<{
@@ -1479,6 +1593,23 @@ export class ClineProvider
 		// Ensure apiProvider is set properly if not already in state
 		if (!providerSettings.apiProvider) {
 			providerSettings.apiProvider = apiProvider
+		}
+
+		// Check OAuth connection status for Anthropic
+		if (providerSettings.apiProvider === "anthropic" && providerSettings.anthropicUseOAuth) {
+			const isAuthenticated = await this.anthropicOAuthService.isAuthenticated()
+			providerSettings.anthropicOAuthConnected = isAuthenticated
+
+			// If not authenticated but OAuth is enabled, clear the OAuth settings
+			if (!isAuthenticated) {
+				providerSettings.anthropicOAuthAccessToken = undefined
+			} else {
+				// Ensure we have a valid token
+				const validToken = await this.ensureValidAnthropicOAuthToken()
+				if (validToken) {
+					providerSettings.anthropicOAuthAccessToken = validToken
+				}
+			}
 		}
 
 		let organizationAllowList = ORGANIZATION_ALLOW_ALL

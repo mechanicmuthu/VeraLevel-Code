@@ -167,6 +167,8 @@ export interface WebviewMessage {
 		| "removeInstalledMarketplaceItem"
 		| "marketplaceInstallResult"
 		| "switchTab"
+		| "anthropicOAuthConnect"
+		| "anthropicOAuthDisconnect"
 	text?: string
 	tab?: "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "account"
 	disabled?: boolean
@@ -203,6 +205,7 @@ export interface WebviewMessage {
 	mpItem?: MarketplaceItem
 	mpInstallOptions?: InstallMarketplaceItemOptions
 	config?: Record<string, any> // Add config to the payload
+	uriScheme?: string // For OAuth callbacks
 }
 
 export const checkoutDiffPayloadSchema = z.object({
