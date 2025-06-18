@@ -17,9 +17,14 @@ export function isPathInIgnoredDirectory(filePath: string): boolean {
 		// Skip empty parts (from leading or trailing slashes)
 		if (!part) continue
 
-		// Handle the ".*" pattern for hidden directories
-		if (DIRS_TO_IGNORE.includes(".*") && part.startsWith(".") && part !== ".") {
-			return true
+		// For code index scanning, we still want to filter out most hidden directories
+		// but allow access to specific useful ones via list_files tool
+		if (part.startsWith(".") && part !== ".") {
+			// Allow specific useful hidden directories
+			const allowedHiddenDirs = [".tools", ".github", ".vscode", ".devcontainer", ".well-known"]
+			if (!allowedHiddenDirs.includes(part)) {
+				return true
+			}
 		}
 
 		// Check for exact matches
@@ -30,11 +35,6 @@ export function isPathInIgnoredDirectory(filePath: string): boolean {
 
 	// Check if path contains any ignored directory pattern
 	for (const dir of DIRS_TO_IGNORE) {
-		if (dir === ".*") {
-			// Already handled above
-			continue
-		}
-
 		// Check if the directory appears in the path
 		if (normalizedPath.includes(`/${dir}/`)) {
 			return true
