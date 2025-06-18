@@ -32,6 +32,11 @@ function getSimilarity(original: string, search: string): number {
 /**
  * Performs a "middle-out" search of `lines` (between [startIndex, endIndex]) to find
  * the slice that is most similar to `searchChunk`. Returns the best score, index, and matched text.
+ *
+ * Performance safeguards:
+ * - Maximum iteration limit to prevent hanging on large files
+ * - Early exit when perfect match is found
+ * - Timeout mechanism for very large files
  */
 function fuzzySearch(lines: string[], searchChunk: string, startIndex: number, endIndex: number) {
 	let bestScore = 0
@@ -40,12 +45,25 @@ function fuzzySearch(lines: string[], searchChunk: string, startIndex: number, e
 
 	const searchLen = searchChunk.split(/\r?\n/).length
 
+	// Performance safeguards for large files
+	const searchRange = endIndex - startIndex
+	const MAX_ITERATIONS = Math.min(searchRange, 10000) // Limit iterations to prevent hanging
+	const TIMEOUT_MS = 5000 // 5 second timeout for very large files
+	const startTime = Date.now()
+
 	// Middle-out from the midpoint
 	const midPoint = Math.floor((startIndex + endIndex) / 2)
 	let leftIndex = midPoint
 	let rightIndex = midPoint + 1
+	let iterations = 0
 
-	while (leftIndex >= startIndex || rightIndex <= endIndex - searchLen) {
+	while ((leftIndex >= startIndex || rightIndex <= endIndex - searchLen) && iterations < MAX_ITERATIONS) {
+		// Check for timeout on large files to prevent hanging
+		if (iterations % 100 === 0 && Date.now() - startTime > TIMEOUT_MS) {
+			console.warn(`[fuzzySearch] Timeout reached after ${iterations} iterations on large file search`)
+			break
+		}
+
 		if (leftIndex >= startIndex) {
 			const originalChunk = lines.slice(leftIndex, leftIndex + searchLen).join("\n")
 			const similarity = getSimilarity(originalChunk, searchChunk)
@@ -54,6 +72,11 @@ function fuzzySearch(lines: string[], searchChunk: string, startIndex: number, e
 				bestScore = similarity
 				bestMatchIndex = leftIndex
 				bestMatchContent = originalChunk
+
+				// Early exit for perfect matches to improve performance
+				if (similarity >= 1.0) {
+					break
+				}
 			}
 			leftIndex--
 		}
@@ -66,9 +89,23 @@ function fuzzySearch(lines: string[], searchChunk: string, startIndex: number, e
 				bestScore = similarity
 				bestMatchIndex = rightIndex
 				bestMatchContent = originalChunk
+
+				// Early exit for perfect matches to improve performance
+				if (similarity >= 1.0) {
+					break
+				}
 			}
 			rightIndex++
 		}
+
+		iterations++
+	}
+
+	// Log performance metrics for debugging large file issues
+	if (iterations >= MAX_ITERATIONS || Date.now() - startTime > 1000) {
+		console.warn(
+			`[fuzzySearch] Performance warning: ${iterations} iterations, ${Date.now() - startTime}ms, range: ${searchRange} lines`,
+		)
 	}
 
 	return { bestScore, bestMatchIndex, bestMatchContent }
