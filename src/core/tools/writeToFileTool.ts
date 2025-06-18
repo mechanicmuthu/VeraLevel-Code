@@ -29,6 +29,21 @@ export async function writeToFileTool(
 	if (block.partial && (!relPath || newContent === undefined)) {
 		// checking for newContent ensure relPath is complete
 		// wait so we can determine if it's a new file or editing an existing file
+		// Provide feedback to the UI even when partial to prevent getting stuck
+		if (!relPath || newContent === undefined) {
+			// Show partial progress to prevent the AI from getting stuck in a loop
+			const partialProps: ClineSayTool = {
+				tool: "newFileCreated", // Default, will be updated when we have more info
+				path: relPath ? getReadablePath(cline.cwd, removeClosingTag("path", relPath)) : "...",
+				content: newContent || "...",
+			}
+
+			try {
+				await cline.ask("tool", JSON.stringify(partialProps), true).catch(() => {})
+			} catch (error) {
+				// Ignore errors during partial updates
+			}
+		}
 		return
 	}
 

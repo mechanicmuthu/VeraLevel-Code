@@ -330,15 +330,17 @@ describe("writeToFileTool", () => {
 	})
 
 	describe("partial block handling", () => {
-		it("returns early when path is missing in partial block", async () => {
+		it("provides feedback when path is missing in partial block", async () => {
 			await executeWriteFileTool({ path: undefined }, { isPartial: true })
 
+			expect(mockCline.ask).toHaveBeenCalledWith("tool", expect.any(String), true)
 			expect(mockCline.diffViewProvider.open).not.toHaveBeenCalled()
 		})
 
-		it("returns early when content is undefined in partial block", async () => {
+		it("provides feedback when content is undefined in partial block", async () => {
 			await executeWriteFileTool({ content: undefined }, { isPartial: true })
 
+			expect(mockCline.ask).toHaveBeenCalledWith("tool", expect.any(String), true)
 			expect(mockCline.diffViewProvider.open).not.toHaveBeenCalled()
 		})
 
