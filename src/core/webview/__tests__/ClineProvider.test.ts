@@ -365,10 +365,12 @@ describe("ClineProvider", () => {
 
 		expect(mockWebviewView.webview.html).toContain("<!DOCTYPE html>")
 
-		// Verify Content Security Policy contains the necessary PostHog domains
+		// Verify Content Security Policy contains the necessary PostHog domains and webview resources
 		expect(mockWebviewView.webview.html).toContain(
 			"connect-src https://openrouter.ai https://api.requesty.ai https://us.i.posthog.com https://us-assets.i.posthog.com",
 		)
+		// Verify CSP includes vscode-webview-resource for offline compatibility
+		expect(mockWebviewView.webview.html).toContain("vscode-webview-resource:")
 
 		// Extract the script-src directive section and verify required security elements
 		const html = mockWebviewView.webview.html
