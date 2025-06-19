@@ -32,6 +32,7 @@ import {
 import { fileExistsAtPath } from "../../utils/fs"
 import { arePathsEqual } from "../../utils/path"
 import { injectVariables } from "../../utils/config"
+import { SchemaPinService } from "../schemapin"
 
 export type McpConnection = {
 	server: McpServer
@@ -133,15 +134,49 @@ export class McpHub {
 	isConnecting: boolean = false
 	private refCount: number = 0 // Reference counter for active clients
 	private configChangeDebounceTimers: Map<string, NodeJS.Timeout> = new Map()
+	private schemaPinService?: SchemaPinService
 
 	constructor(provider: ClineProvider) {
 		this.providerRef = new WeakRef(provider)
+		this.initializeSchemaPinService().catch(console.error)
 		this.watchMcpSettingsFile()
 		this.watchProjectMcpFile().catch(console.error)
 		this.setupWorkspaceFoldersWatcher()
 		this.initializeGlobalMcpServers()
 		this.initializeProjectMcpServers()
 	}
+
+	/**
+	 * Initialize SchemaPin service for schema verification
+	 */
+	private async initializeSchemaPinService(): Promise<void> {
+		try {
+			const provider = this.providerRef.deref()
+			if (!provider) {
+				console.warn("Provider not available for SchemaPin initialization")
+				return
+			}
+
+			// Get SchemaPin configuration from VSCode settings
+			const config = vscode.workspace.getConfiguration("roo-cline.schemapin")
+			const schemaPinConfig = {
+				enabled: config.get<boolean>("enabled", true),
+				autoPin: config.get<boolean>("autoPin", false),
+				timeout: config.get<number>("verificationTimeout", 5000),
+				verifyOnToolCall: !config.get<boolean>("strictMode", false), // In strict mode, we verify on tool call
+			}
+
+			if (schemaPinConfig.enabled) {
+				this.schemaPinService = new SchemaPinService(provider.context, schemaPinConfig)
+				await this.schemaPinService.initialize()
+				console.log("SchemaPin service initialized successfully")
+			}
+		} catch (error) {
+			console.error("Failed to initialize SchemaPin service:", error)
+			// Don't throw - SchemaPin is optional
+		}
+	}
+
 	/**
 	 * Registers a client (e.g., ClineProvider) using this hub.
 	 * Increments the reference count.
@@ -1457,6 +1492,17 @@ export class McpHub {
 			throw new Error(`Server "${serverName}" is disabled and cannot be used`)
 		}
 
+		// SchemaPin verification for tool calls
+		if (this.schemaPinService && this.schemaPinService.isEnabled()) {
+			try {
+				await this.verifyToolSchema(serverName, toolName, source)
+			} catch (error) {
+				console.warn(`SchemaPin verification failed for ${serverName}/${toolName}:`, error)
+				// In non-strict mode, we continue with the tool call
+				// In strict mode, this would throw an error
+			}
+		}
+
 		let timeout: number
 		try {
 			const parsedConfig = ServerConfigSchema.parse(JSON.parse(connection.server.config))
@@ -1563,6 +1609,124 @@ export class McpHub {
 		}
 	}
 
+	/**
+	 * Verify tool schema using SchemaPin
+	 */
+	private async verifyToolSchema(serverName: string, toolName: string, source?: "global" | "project"): Promise<void> {
+		if (!this.schemaPinService) {
+			return
+		}
+
+		const connection = this.findConnection(serverName, source)
+		if (!connection) {
+			return
+		}
+
+		// Find the tool in the server's tools list
+		const tool = connection.server.tools?.find((t) => t.name === toolName)
+		if (!tool || !tool.inputSchema) {
+			return
+		}
+
+		// Check for signed schema file
+		const signedSchemaPath = await this.findSignedSchemaFile(serverName, toolName, source)
+		if (!signedSchemaPath) {
+			// No signed schema found - this is okay in non-strict mode
+			return
+		}
+
+		try {
+			const signedSchemaContent = await fs.readFile(signedSchemaPath, "utf-8")
+			const signedSchema = JSON.parse(signedSchemaContent)
+
+			if (!signedSchema.signature) {
+				console.warn(`No signature found in signed schema file for ${serverName}/${toolName}`)
+				return
+			}
+
+			// Perform SchemaPin verification
+			const verificationResult = await this.schemaPinService.verifyMcpTool({
+				serverName,
+				toolName,
+				schema: tool.inputSchema as Record<string, unknown>,
+				signature: signedSchema.signature,
+				domain: this.extractDomainFromServerName(serverName),
+			})
+
+			if (!verificationResult.valid) {
+				throw new Error(`Schema verification failed: ${verificationResult.error}`)
+			}
+
+			console.log(`SchemaPin verification successful for ${serverName}/${toolName}`)
+		} catch (error) {
+			console.error(`SchemaPin verification error for ${serverName}/${toolName}:`, error)
+			throw error
+		}
+	}
+
+	/**
+	 * Find signed schema file for a tool
+	 */
+	private async findSignedSchemaFile(
+		serverName: string,
+		toolName: string,
+		source?: "global" | "project",
+	): Promise<string | null> {
+		// Look for .signed.schema.json files in common locations
+		const possiblePaths = [
+			// Next to the server executable
+			`${serverName}/${toolName}.signed.schema.json`,
+			`${serverName}.${toolName}.signed.schema.json`,
+			// In a schemas directory
+			`schemas/${serverName}/${toolName}.signed.schema.json`,
+			`schemas/${serverName}.${toolName}.signed.schema.json`,
+		]
+
+		for (const relativePath of possiblePaths) {
+			try {
+				// Check in project directory first if this is a project server
+				if (source === "project" && vscode.workspace.workspaceFolders?.length) {
+					const projectPath = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, relativePath)
+					if (await fileExistsAtPath(projectPath)) {
+						return projectPath
+					}
+				}
+
+				// Check in global MCP directory
+				const provider = this.providerRef.deref()
+				if (provider) {
+					const globalPath = path.join(await provider.ensureMcpServersDirectoryExists(), relativePath)
+					if (await fileExistsAtPath(globalPath)) {
+						return globalPath
+					}
+				}
+			} catch (error) {
+				// Continue checking other paths
+			}
+		}
+
+		return null
+	}
+
+	/**
+	 * Extract domain from server name for SchemaPin
+	 */
+	private extractDomainFromServerName(serverName: string): string {
+		// Try to extract domain from server name
+		const urlMatch = serverName.match(/https?:\/\/([^\/]+)/)
+		if (urlMatch) {
+			return urlMatch[1]
+		}
+
+		// Check if it looks like a domain
+		if (serverName.includes(".") && !serverName.includes("/")) {
+			return serverName
+		}
+
+		// Fallback to using the server name as domain
+		return serverName
+	}
+
 	async dispose(): Promise<void> {
 		// Prevent multiple disposals
 		if (this.isDisposed) {
@@ -1577,6 +1741,11 @@ export class McpHub {
 			clearTimeout(timer)
 		}
 		this.configChangeDebounceTimers.clear()
+
+		// Dispose SchemaPin service
+		if (this.schemaPinService) {
+			await this.schemaPinService.dispose()
+		}
 
 		this.removeAllFileWatchers()
 		for (const connection of this.connections) {
