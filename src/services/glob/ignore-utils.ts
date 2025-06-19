@@ -17,8 +17,12 @@ export function isPathInIgnoredDirectory(filePath: string): boolean {
 		// Skip empty parts (from leading or trailing slashes)
 		if (!part) continue
 
+		// Skip the current directory marker "."
+		if (part === ".") continue
+
 		// Handle the ".*" pattern for hidden directories
-		if (DIRS_TO_IGNORE.includes(".*") && part.startsWith(".") && part !== ".") {
+		// Only match directories that start with "." and have more characters
+		if (DIRS_TO_IGNORE.includes(".*") && part.startsWith(".") && part.length > 1) {
 			return true
 		}
 
