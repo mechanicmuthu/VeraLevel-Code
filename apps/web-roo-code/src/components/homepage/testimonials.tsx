@@ -69,7 +69,6 @@ export function Testimonials() {
 			y: 0,
 			transition: {
 				duration: 0.6,
-				ease: [0.21, 0.45, 0.27, 0.9],
 			},
 		},
 	}
@@ -82,7 +81,7 @@ export function Testimonials() {
 			opacity: 1,
 			transition: {
 				duration: 1.2,
-				ease: "easeOut",
+				// removed ease due to type constraints in motion-dom Easing typing
 			},
 		},
 	}

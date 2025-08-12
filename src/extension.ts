@@ -134,17 +134,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	cloudService.on("user-info", async ({ userInfo }) => {
 		postStateListener()
 
-		const bridgeConfig = await cloudService.cloudAPI?.bridgeConfig().catch(() => undefined)
-
-		if (!bridgeConfig) {
-			outputChannel.appendLine("[CloudService] Failed to get bridge config")
-			return
-		}
-
+		// bridgeConfig removed: fallback to default config
 		ExtensionBridgeService.handleRemoteControlState(
 			userInfo,
 			contextProxy.getValue("remoteControlEnabled"),
-			{ ...bridgeConfig, provider },
+			provider,
 			(message: string) => outputChannel.appendLine(message),
 		)
 	})

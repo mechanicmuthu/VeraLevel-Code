@@ -2145,19 +2145,8 @@ export class ClineProvider
 
 		const userInfo = CloudServiceImport.instance.getUserInfo()
 
-		const bridgeConfig = await CloudServiceImport.instance.cloudAPI?.bridgeConfig().catch(() => undefined)
-
-		if (!bridgeConfig) {
-			this.log("[CloudService] Failed to get bridge config")
-			return
-		}
-
-		ExtensionBridgeService.handleRemoteControlState(
-			userInfo,
-			enabled,
-			{ ...bridgeConfig, provider: this },
-			(message: string) => this.log(message),
-		)
+		// bridgeConfig removed: fallback to default config
+		ExtensionBridgeService.handleRemoteControlState(userInfo, enabled, this, (message: string) => this.log(message))
 
 		if (isRemoteControlEnabled(userInfo, enabled)) {
 			// Set up TaskBridgeService for the currently active task if one exists.
@@ -2166,13 +2155,8 @@ export class ClineProvider
 			if (currentTask && !currentTask.taskBridgeService && CloudService.hasInstance()) {
 				try {
 					if (!currentTask.taskBridgeService) {
-						const bridgeConfig = await CloudService.instance.cloudAPI?.bridgeConfig().catch(() => undefined)
-
-						if (bridgeConfig) {
-							currentTask.taskBridgeService = await TaskBridgeService.createInstance({
-								...bridgeConfig,
-							})
-						}
+						// bridgeConfig removed: fallback to default config
+						currentTask.taskBridgeService = TaskBridgeService.getInstance()
 					}
 
 					if (currentTask.taskBridgeService) {
