@@ -18,10 +18,11 @@ export const ServiceTier = ({ apiConfiguration, setApiConfigurationField, modelI
 	const { t } = useAppTranslation()
 	const effectiveModelId = modelId || apiConfiguration.openAiModelId || ""
 
-	const isSupported = useMemo(
-		() => !!effectiveModelId && FLEX_COMPATIBLE_MODELS.some((m) => effectiveModelId.includes(m)),
-		[effectiveModelId],
-	)
+	const isSupported = useMemo(() => {
+		const supported = !!effectiveModelId && FLEX_COMPATIBLE_MODELS.some((m) => effectiveModelId.includes(m))
+		console.log("[DEBUG] Service tier supported check:", { effectiveModelId, supported, FLEX_COMPATIBLE_MODELS })
+		return supported
+	}, [effectiveModelId])
 
 	// Initialize to auto when supported and unset; clear when unsupported
 	useEffect(() => {

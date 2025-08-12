@@ -57,7 +57,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			this.options.enableGpt5ReasoningSummary = true
 		}
 		const apiKey = this.options.openAiNativeApiKey ?? "not-provided"
-		this.client = new OpenAI({ baseURL: this.options.openAiNativeBaseUrl, apiKey })
+		this.client = new OpenAI({
+			baseURL: this.options.openAiNativeBaseUrl,
+			apiKey,
+			timeout: 15 * 1000 * 60, // 15 minutes default timeout
+		})
 	}
 
 	private normalizeGpt5Usage(usage: any, model: OpenAiNativeModel): ApiStreamUsageChunk | undefined {
@@ -136,7 +140,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		const isOriginalO1 = model.id === "o1"
 		const { reasoning } = this.getModel()
 
-		const response = await this.client.chat.completions.create({
+		const params: any = {
 			model: model.id,
 			messages: [
 				{
@@ -148,9 +152,30 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			stream: true,
 			stream_options: { include_usage: true },
 			...(reasoning && reasoning),
-		})
+		}
 
-		yield* this.handleStreamResponse(response, model)
+		// Add service_tier parameter if configured and not "auto"
+		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
+			params.service_tier = this.options.serviceTier
+			console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+			console.log("[DEBUG] Full request params:", JSON.stringify(params, null, 2))
+		} else {
+			console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
+		}
+
+		const response = await this.client.chat.completions.create(params, { timeout: 15 * 1000 * 60 })
+		console.log("[DEBUG] OpenAI Chat Completions Response (O1Family):", response)
+
+		if (typeof (response as any)[Symbol.asyncIterator] !== "function") {
+			throw new Error(
+				"OpenAI SDK did not return an AsyncIterable for streaming response. Please check SDK version and usage.",
+			)
+		}
+
+		yield* this.handleStreamResponse(
+			response as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+			model,
+		)
 	}
 
 	private async *handleReasonerMessage(
@@ -161,7 +186,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	): ApiStream {
 		const { reasoning } = this.getModel()
 
-		const stream = await this.client.chat.completions.create({
+		const params: any = {
 			model: family,
 			messages: [
 				{
@@ -173,9 +198,29 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			stream: true,
 			stream_options: { include_usage: true },
 			...(reasoning && reasoning),
-		})
+		}
 
-		yield* this.handleStreamResponse(stream, model)
+		// Add service_tier parameter if configured and not "auto"
+		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
+			params.service_tier = this.options.serviceTier
+			console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+			console.log("[DEBUG] Full request params:", JSON.stringify(params, null, 2))
+		} else {
+			console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
+		}
+
+		const stream = await this.client.chat.completions.create(params, { timeout: 15 * 1000 * 60 })
+
+		if (typeof (stream as any)[Symbol.asyncIterator] !== "function") {
+			throw new Error(
+				"OpenAI SDK did not return an AsyncIterable for streaming response. Please check SDK version and usage.",
+			)
+		}
+
+		yield* this.handleStreamResponse(
+			stream as unknown as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
+			model,
+		)
 	}
 
 	private async *handleDefaultModelMessage(
@@ -200,7 +245,16 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			params.verbosity = verbosity
 		}
 
-		const stream = await this.client.chat.completions.create(params)
+		// Add service_tier parameter if configured and not "auto"
+		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
+			params.service_tier = this.options.serviceTier
+			console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+			console.log("[DEBUG] Full request params:", JSON.stringify(params, null, 2))
+		} else {
+			console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
+		}
+
+		const stream = await this.client.chat.completions.create(params, { timeout: 15 * 1000 * 60 })
 
 		if (typeof (stream as any)[Symbol.asyncIterator] !== "function") {
 			throw new Error(
@@ -277,6 +331,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			temperature?: number
 			max_output_tokens?: number
 			previous_response_id?: string
+			service_tier?: string
 		}
 
 		const requestBody: Gpt5RequestBody = {
@@ -297,9 +352,20 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			...(requestPreviousResponseId && { previous_response_id: requestPreviousResponseId }),
 		}
 
+		// Add service_tier parameter if configured and not "auto"
+		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
+			requestBody.service_tier = this.options.serviceTier
+			console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+			console.log("[DEBUG] Full request body:", JSON.stringify(requestBody, null, 2))
+		} else {
+			console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
+		}
+
 		try {
 			// Use the official SDK
-			const stream = (await (this.client as any).responses.create(requestBody)) as AsyncIterable<any>
+			const stream = (await (this.client as any).responses.create(requestBody, {
+				timeout: 15 * 1000 * 60,
+			})) as AsyncIterable<any>
 
 			if (typeof (stream as any)[Symbol.asyncIterator] !== "function") {
 				throw new Error(
@@ -308,11 +374,13 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			}
 
 			for await (const event of stream) {
+				console.log("[DEBUG] GPT-5 Responses API Stream Event:", event) // Log each event
 				for await (const outChunk of this.processGpt5Event(event, model)) {
 					yield outChunk
 				}
 			}
 		} catch (sdkErr: any) {
+			console.error("[DEBUG] OpenAI Responses API SDK Error:", sdkErr) // Log SDK errors
 			// Check if this is a 400 error about previous_response_id not found
 			const errorMessage = sdkErr?.message || sdkErr?.error?.message || ""
 			const is400Error = sdkErr?.status === 400 || sdkErr?.response?.status === 400
@@ -419,6 +487,15 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		const baseUrl = this.options.openAiNativeBaseUrl || "https://api.openai.com"
 		const url = `${baseUrl}/v1/responses`
 
+		// Log the exact request being sent
+		console.log("[DEBUG] GPT-5 Responses API Request URL:", url)
+		console.log("[DEBUG] GPT-5 Responses API Request Headers:", {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${apiKey.substring(0, 8)}...`, // Log only first 8 chars of API key for security
+			Accept: "text/event-stream",
+		})
+		console.log("[DEBUG] GPT-5 Responses API Request Body:", JSON.stringify(requestBody, null, 2))
+
 		try {
 			const response = await fetch(url, {
 				method: "POST",
@@ -430,8 +507,18 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 				body: JSON.stringify(requestBody),
 			})
 
+			// Log the response status
+			console.log("[DEBUG] GPT-5 Responses API Response Status:", response.status)
+			// Convert headers to a plain object for logging
+			const headersObj: Record<string, string> = {}
+			response.headers.forEach((value, key) => {
+				headersObj[key] = value
+			})
+			console.log("[DEBUG] GPT-5 Responses API Response Headers:", headersObj)
+
 			if (!response.ok) {
 				const errorText = await response.text()
+				console.log("[DEBUG] GPT-5 Responses API Error Response Body:", errorText)
 
 				let errorMessage = `GPT-5 API request failed (${response.status})`
 				let errorDetails = ""
@@ -471,6 +558,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 					this.resolveResponseId(undefined)
 
 					// Retry the request without the previous_response_id
+					console.log(
+						"[DEBUG] GPT-5 Responses API Retry Request Body:",
+						JSON.stringify(retryRequestBody, null, 2),
+					)
+
 					const retryResponse = await fetch(url, {
 						method: "POST",
 						headers: {
@@ -481,7 +573,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 						body: JSON.stringify(retryRequestBody),
 					})
 
+					console.log("[DEBUG] GPT-5 Responses API Retry Response Status:", retryResponse.status)
+
 					if (!retryResponse.ok) {
+						const retryErrorText = await retryResponse.text()
+						console.log("[DEBUG] GPT-5 Responses API Retry Error Response Body:", retryErrorText)
 						// If retry also fails, throw the original error
 						throw new Error(`GPT-5 API retry failed (${retryResponse.status})`)
 					}
@@ -537,6 +633,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			// Handle streaming response
 			yield* this.handleGpt5StreamResponse(response.body, model)
 		} catch (error) {
+			console.error("[DEBUG] GPT-5 Responses API Fetch Error:", error) // Log fetch errors
 			if (error instanceof Error) {
 				// Re-throw with the original error message if it's already formatted
 				if (error.message.includes("GPT-5")) {
@@ -1040,6 +1137,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	 * Used by both the official SDK streaming path and (optionally) by the SSE fallback.
 	 */
 	private async *processGpt5Event(event: any, model: OpenAiNativeModel): ApiStream {
+		console.log("[DEBUG] processGpt5Event: Processing event type:", event?.type)
 		// Persist response id for conversation continuity when available
 		if (event?.response?.id) {
 			this.resolveResponseId(event.response.id)
@@ -1148,6 +1246,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		model: OpenAiNativeModel,
 	): ApiStream {
 		for await (const chunk of stream) {
+			console.log("[DEBUG] handleStreamResponse: OpenAI Chat Completions Stream Chunk:", chunk) // Log each chunk here
 			const delta = chunk.choices[0]?.delta
 
 			if (delta?.content) {
