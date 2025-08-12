@@ -74,6 +74,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			totalOutputTokens,
 			cacheWriteTokens || 0,
 			cacheReadTokens || 0,
+			this.options.serviceTier,
 		)
 
 		return {
@@ -1180,6 +1181,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			outputTokens,
 			cacheWriteTokens || 0,
 			cacheReadTokens || 0,
+			this.options.serviceTier,
 		)
 
 		yield {
