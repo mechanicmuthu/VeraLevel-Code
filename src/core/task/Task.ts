@@ -32,7 +32,8 @@ import {
 	isBlockingAsk,
 } from "@roo-code/types"
 import { TelemetryService } from "@roo-code/telemetry"
-import { CloudService, TaskBridgeService } from "@roo-code/cloud"
+import * as CloudModule from "@roo-code/cloud"
+const { CloudService, TaskBridgeService } = (CloudModule as any).default ?? (CloudModule as any)
 
 // api
 import { ApiHandler, ApiHandlerCreateMessageMetadata, buildApiHandler } from "../../api"
@@ -240,7 +241,7 @@ export class Task extends EventEmitter<TaskEvents> implements TaskLike {
 
 	// Task Bridge
 	enableTaskBridge: boolean
-	bridgeService: TaskBridgeService | null = null
+	bridgeService: any | null = null
 
 	// Streaming
 	isWaitingForFirstChunk = false

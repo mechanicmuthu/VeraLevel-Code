@@ -2137,11 +2137,9 @@ export class ClineProvider
 	 * Manages UnifiedBridgeService lifecycle
 	 */
 	public async handleRemoteControlToggle(enabled: boolean) {
-		const {
-			CloudService: CloudServiceImport,
-			ExtensionBridgeService,
-			TaskBridgeService,
-		} = await import("@roo-code/cloud")
+		const cloudMod = await import("@roo-code/cloud")
+		const cloud = (cloudMod as any).default ?? (cloudMod as any)
+		const { CloudService: CloudServiceImport, ExtensionBridgeService, TaskBridgeService } = cloud
 
 		const userInfo = CloudServiceImport.instance.getUserInfo()
 

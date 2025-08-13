@@ -12,7 +12,8 @@ try {
 	console.warn("Failed to load environment variables:", e)
 }
 
-import { CloudService, ExtensionBridgeService } from "@roo-code/cloud"
+import * as CloudModule from "@roo-code/cloud"
+const { CloudService, ExtensionBridgeService } = (CloudModule as any).default ?? (CloudModule as any)
 import { TelemetryService, PostHogTelemetryClient } from "@roo-code/telemetry"
 
 import "./utils/path" // Necessary to have access to String.prototype.toPosix.
@@ -131,7 +132,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	cloudService.on("auth-state-changed", postStateListener)
 	cloudService.on("settings-updated", postStateListener)
 
-	cloudService.on("user-info", async ({ userInfo }) => {
+	cloudService.on("user-info", async ({ userInfo }: { userInfo: any }) => {
 		postStateListener()
 
 		const bridgeConfig = await cloudService.cloudAPI?.bridgeConfig().catch(() => undefined)
