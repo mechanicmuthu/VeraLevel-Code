@@ -2134,7 +2134,7 @@ export class ClineProvider
 
 	/**
 	 * Handle remote control enabled/disabled state changes
-	 * Manages ExtensionBridgeService and TaskBridgeService lifecycle
+	 * Manages UnifiedBridgeService lifecycle
 	 */
 	public async handleRemoteControlToggle(enabled: boolean) {
 		const {
@@ -2145,48 +2145,51 @@ export class ClineProvider
 
 		const userInfo = CloudServiceImport.instance.getUserInfo()
 
-		// bridgeConfig removed: fallback to default config
-		ExtensionBridgeService.handleRemoteControlState(userInfo, enabled, this, (message: string) => this.log(message))
+		const bridgeConfig = await CloudServiceImport.instance.cloudAPI?.bridgeConfig().catch(() => undefined)
+
+		if (!bridgeConfig) {
+			this.log("[ClineProvider#handleRemoteControlToggle] Failed to get bridge config")
+			return
+		}
+
+		await ExtensionBridgeService.handleRemoteControlState(
+			userInfo,
+			enabled,
+			{ ...bridgeConfig, provider: this },
+			(message: string) => this.log(message),
+		)
 
 		if (isRemoteControlEnabled(userInfo, enabled)) {
-			// Set up TaskBridgeService for the currently active task if one exists.
 			const currentTask = this.getCurrentCline()
 
-			if (currentTask && !currentTask.taskBridgeService && CloudService.hasInstance()) {
+			if (currentTask && !currentTask.bridgeService) {
 				try {
-					if (!currentTask.taskBridgeService) {
-						// bridgeConfig removed: fallback to default config
-						currentTask.taskBridgeService = TaskBridgeService.getInstance()
-					}
+					currentTask.bridgeService = TaskBridgeService.getInstance()
 
-					if (currentTask.taskBridgeService) {
-						await currentTask.taskBridgeService.subscribeToTask(currentTask)
+					if (currentTask.bridgeService) {
+						await currentTask.bridgeService.subscribeToTask(currentTask)
 					}
-
-					this.log(`[TaskBridgeService] Subscribed current task ${currentTask.taskId} to TaskBridge`)
 				} catch (error) {
-					const message = `[TaskBridgeService#subscribeToTask] ${error instanceof Error ? error.message : String(error)}`
+					const message = `[ClineProvider#handleRemoteControlToggle] subscribeToTask failed - ${error instanceof Error ? error.message : String(error)}`
 					this.log(message)
 					console.error(message)
 				}
 			}
 		} else {
-			// Disconnect TaskBridgeService for all tasks in the stack.
 			for (const task of this.clineStack) {
-				if (task.taskBridgeService) {
+				if (task.bridgeService) {
 					try {
-						await task.taskBridgeService.unsubscribeFromTask(task.taskId)
-						task.taskBridgeService = null
-						this.log(`[TaskBridgeService] Unsubscribed task ${task.taskId} from TaskBridge`)
+						await task.bridgeService.unsubscribeFromTask(task.taskId)
+						task.bridgeService = null
 					} catch (error) {
-						const message = `[TaskBridgeService#unsubscribeFromTask] for task ${task.taskId}: ${error instanceof Error ? error.message : String(error)}`
+						const message = `[ClineProvider#handleRemoteControlToggle] unsubscribeFromTask failed - ${error instanceof Error ? error.message : String(error)}`
 						this.log(message)
 						console.error(message)
 					}
 				}
 			}
 
-			TaskBridgeService.resetInstance()
+			ExtensionBridgeService.resetInstance()
 		}
 	}
 

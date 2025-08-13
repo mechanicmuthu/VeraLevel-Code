@@ -134,11 +134,17 @@ export async function activate(context: vscode.ExtensionContext) {
 	cloudService.on("user-info", async ({ userInfo }) => {
 		postStateListener()
 
-		// bridgeConfig removed: fallback to default config
+		const bridgeConfig = await cloudService.cloudAPI?.bridgeConfig().catch(() => undefined)
+
+		if (!bridgeConfig) {
+			outputChannel.appendLine("[CloudService] Failed to get bridge config")
+			return
+		}
+
 		ExtensionBridgeService.handleRemoteControlState(
 			userInfo,
 			contextProxy.getValue("remoteControlEnabled"),
-			provider,
+			{ ...bridgeConfig, provider },
 			(message: string) => outputChannel.appendLine(message),
 		)
 	})
@@ -274,11 +280,10 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate() {
 	outputChannel.appendLine(`${Package.name} extension deactivated`)
 
-	// Cleanup Extension Bridge service.
-	const extensionBridgeService = ExtensionBridgeService.getInstance()
+	const bridgeService = ExtensionBridgeService.getInstance()
 
-	if (extensionBridgeService) {
-		await extensionBridgeService.disconnect()
+	if (bridgeService) {
+		await bridgeService.disconnect()
 	}
 
 	await McpServerManager.cleanup(extensionContext)
