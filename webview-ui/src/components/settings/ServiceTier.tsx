@@ -17,6 +17,12 @@ const FLEX_COMPATIBLE_MODELS = [
 	"gpt-5-nano-2025-08-07",
 	"o3-2025-04-16",
 	"o4-mini-2025-04-16",
+	"o3",
+	"o3-high",
+	"o3-low",
+	"o4-mini",
+	"o4-mini-high",
+	"o4-mini-low",
 ]
 const SERVICE_TIERS: Array<"auto" | "default" | "flex"> = ["auto", "default", "flex"]
 

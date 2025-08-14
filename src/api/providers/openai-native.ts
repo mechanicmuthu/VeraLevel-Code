@@ -143,6 +143,29 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		const isOriginalO1 = model.id === "o1"
 		const { reasoning } = this.getModel()
 
+		console.log(
+			"[DEBUG] Sending O1 Family API request with payload:",
+			JSON.stringify(
+				{
+					model: model.id,
+					messages: [
+						{
+							role: isOriginalO1 ? "developer" : "user",
+							content: isOriginalO1 ? `Formatting re-enabled\n${systemPrompt}` : systemPrompt,
+						},
+						...convertToOpenAiMessages(messages),
+					],
+					stream: true,
+					stream_options: { include_usage: true },
+					...(reasoning && reasoning),
+					// Add service_tier parameter if configured and not "auto"
+					...(this.options.serviceTier &&
+						this.options.serviceTier !== "auto" && { service_tier: this.options.serviceTier }),
+				},
+				null,
+				2,
+			),
+		)
 		const response = await this.client.chat.completions.create({
 			model: model.id,
 			messages: [
@@ -172,6 +195,26 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		console.log("[DEBUG] Entered handleReasonerMessage.")
 		const { reasoning } = this.getModel()
 
+		console.log(
+			"[DEBUG] Sending Reasoner API request with payload:",
+			JSON.stringify(
+				{
+					model: family,
+					messages: [
+						{
+							role: "developer",
+							content: `Formatting re-enabled\n${systemPrompt}`,
+						},
+						...convertToOpenAiMessages(messages),
+					],
+					stream: true,
+					stream_options: { include_usage: true },
+					...(reasoning && reasoning),
+				},
+				null,
+				2,
+			),
+		)
 		const stream = await this.client.chat.completions.create({
 			model: family,
 			messages: [
