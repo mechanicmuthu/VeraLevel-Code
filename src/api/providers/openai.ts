@@ -166,10 +166,6 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
-				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
-				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
-			} else {
-				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// Add max_tokens if needed
@@ -236,10 +232,6 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
-				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
-				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
-			} else {
-				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// Add max_tokens if needed
@@ -289,10 +281,6 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
-				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
-				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
-			} else {
-				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// Add max_tokens if needed
@@ -341,10 +329,6 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
-				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
-				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
-			} else {
-				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// O3 family models do not support the deprecated max_tokens parameter

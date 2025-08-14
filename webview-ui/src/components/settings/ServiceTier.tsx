@@ -30,7 +30,6 @@ export const ServiceTier = ({ apiConfiguration, setApiConfigurationField, modelI
 
 	const isSupported = useMemo(() => {
 		const supported = !!effectiveModelId && FLEX_COMPATIBLE_MODELS.some((m) => effectiveModelId === m) //include only exact match e.g. o3-mini is not supported while o3 is supported
-		console.log("[DEBUG] Service tier supported check:", { effectiveModelId, supported, FLEX_COMPATIBLE_MODELS })
 		return supported
 	}, [effectiveModelId])
 
