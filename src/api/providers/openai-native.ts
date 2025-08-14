@@ -176,6 +176,9 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			stream: true,
 			stream_options: { include_usage: true },
 			...(reasoning && reasoning),
+			// Add service_tier parameter if configured and not "auto"
+			...(this.options.serviceTier &&
+				this.options.serviceTier !== "auto" && { service_tier: this.options.serviceTier }),
 		})
 
 		yield* this.handleStreamResponse(stream, model)
@@ -201,6 +204,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		// Add verbosity only if the model supports it
 		if (verbosity && model.info.supportsVerbosity) {
 			params.verbosity = verbosity
+		}
+
+		// Add service_tier parameter if configured and not "auto"
+		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
+			params.service_tier = this.options.serviceTier
 		}
 
 		const stream = await this.client.chat.completions.create(params)
