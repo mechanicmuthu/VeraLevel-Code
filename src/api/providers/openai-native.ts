@@ -52,6 +52,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 	constructor(options: ApiHandlerOptions) {
 		super()
 		this.options = options
+		console.log("[DEBUG] OpenAiNativeHandler constructor called.")
 		// Default to including reasoning.summary: "auto" for GPT‑5 unless explicitly disabled
 		if (this.options.enableGpt5ReasoningSummary === undefined) {
 			this.options.enableGpt5ReasoningSummary = true
@@ -103,6 +104,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		console.log("[DEBUG] createMessage called.")
 		const model = this.getModel()
 		let id: "o3-mini" | "o3" | "o4-mini" | undefined
 
@@ -115,13 +117,17 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		}
 
 		if (id) {
+			console.log("[DEBUG] Calling handleReasonerMessage.")
 			yield* this.handleReasonerMessage(model, id, systemPrompt, messages)
 		} else if (model.id.startsWith("o1")) {
+			console.log("[DEBUG] Calling handleO1FamilyMessage.")
 			yield* this.handleO1FamilyMessage(model, systemPrompt, messages)
 		} else if (this.isResponsesApiModel(model.id)) {
 			// Both GPT-5 and Codex Mini use the v1/responses endpoint
+			console.log("[DEBUG] Calling handleResponsesApiMessage.")
 			yield* this.handleResponsesApiMessage(model, systemPrompt, messages, metadata)
 		} else {
+			console.log("[DEBUG] Calling handleDefaultModelMessage.")
 			yield* this.handleDefaultModelMessage(model, systemPrompt, messages)
 		}
 	}
@@ -131,6 +137,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],
 	): ApiStream {
+		console.log("[DEBUG] Entered handleO1FamilyMessage.")
 		// o1 supports developer prompt with formatting
 		// o1-preview and o1-mini only support user messages
 		const isOriginalO1 = model.id === "o1"
@@ -162,6 +169,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],
 	): ApiStream {
+		console.log("[DEBUG] Entered handleReasonerMessage.")
 		const { reasoning } = this.getModel()
 
 		const stream = await this.client.chat.completions.create({
@@ -186,6 +194,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],
 	): ApiStream {
+		console.log("[DEBUG] Entered handleDefaultModelMessage.")
 		const { reasoning, verbosity } = this.getModel()
 
 		// Prepare the request parameters
@@ -203,6 +212,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 			params.verbosity = verbosity
 		}
 
+		console.log("[DEBUG] Sending default model API request with payload:", JSON.stringify(params, null, 2))
 		const stream = await this.client.chat.completions.create(params)
 
 		if (typeof (stream as any)[Symbol.asyncIterator] !== "function") {
@@ -223,6 +233,7 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
 	): ApiStream {
+		console.log("[DEBUG] Entered handleResponsesApiMessage.")
 		// Prefer the official SDK Responses API with streaming; fall back to fetch-based SSE if needed.
 		const { verbosity } = this.getModel()
 
@@ -305,6 +316,8 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 			requestBody.service_tier = this.options.serviceTier
 		}
+
+		console.log("[DEBUG] Sending GPT-5 API request with payload:", JSON.stringify(requestBody, null, 2))
 
 		try {
 			// Use the official SDK
@@ -429,6 +442,10 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		const url = `${baseUrl}/v1/responses`
 
 		try {
+			console.log(
+				"[DEBUG] Sending GPT-5 SSE fallback request with payload:",
+				JSON.stringify(requestBody, null, 2),
+			)
 			const response = await fetch(url, {
 				method: "POST",
 				headers: {
@@ -1156,7 +1173,9 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 		stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
 		model: OpenAiNativeModel,
 	): ApiStream {
+		console.log("[DEBUG] handleStreamResponse called.")
 		for await (const chunk of stream) {
+			console.log("[DEBUG] handleStreamResponse chunk received:", JSON.stringify(chunk, null, 2))
 			const delta = chunk.choices[0]?.delta
 
 			if (delta?.content) {

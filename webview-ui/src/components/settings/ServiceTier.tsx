@@ -15,12 +15,8 @@ const FLEX_COMPATIBLE_MODELS = [
 	"gpt-5-2025-08-07",
 	"gpt-5-mini-2025-08-07",
 	"gpt-5-nano-2025-08-07",
-	"o3",
-	"o3-high",
-	"o3-low",
-	"o4-mini",
-	"o4-mini-high",
-	"o4-mini-low",
+	"o3-2025-04-16",
+	"o4-mini-2025-04-16",
 ]
 const SERVICE_TIERS: Array<"auto" | "default" | "flex"> = ["auto", "default", "flex"]
 
@@ -30,6 +26,7 @@ export const ServiceTier = ({ apiConfiguration, setApiConfigurationField, modelI
 
 	const isSupported = useMemo(() => {
 		const supported = !!effectiveModelId && FLEX_COMPATIBLE_MODELS.some((m) => effectiveModelId === m) //include only exact match e.g. o3-mini is not supported while o3 is supported
+		console.log("[DEBUG] Service tier supported check:", { effectiveModelId, supported, FLEX_COMPATIBLE_MODELS })
 		return supported
 	}, [effectiveModelId])
 

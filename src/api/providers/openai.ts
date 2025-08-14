@@ -35,6 +35,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 	constructor(options: ApiHandlerOptions) {
 		super()
 		this.options = options
+		console.log("[DEBUG] OpenAiHandler constructor called.")
 
 		const baseURL = this.options.openAiBaseUrl ?? "https://api.openai.com/v1"
 		const apiKey = this.options.openAiApiKey ?? "not-provided"
@@ -98,6 +99,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 		}
 
 		if (this.options.openAiStreamingEnabled ?? true) {
+			console.log("[DEBUG] createMessage (streaming) called.")
 			let systemMessage: OpenAI.Chat.ChatCompletionSystemMessageParam = {
 				role: "system",
 				content: systemPrompt,
@@ -164,8 +166,13 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				...(reasoning && reasoning),
 			}
 
+			console.log("[DEBUG] Request options (createMessage streaming):", JSON.stringify(requestOptions, null, 2))
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
+				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
+			} else {
+				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// Add max_tokens if needed
@@ -175,6 +182,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				requestOptions,
 				isAzureAiInference ? { path: OPENAI_AZURE_AI_INFERENCE_PATH } : {},
 			)
+			console.log("[DEBUG] createMessage streaming response initiated.")
 
 			const matcher = new XmlMatcher(
 				"think",
@@ -188,6 +196,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 			let lastUsage
 
 			for await (const chunk of stream) {
+				console.log("[DEBUG] createMessage streaming chunk received:", JSON.stringify(chunk, null, 2))
 				const delta = chunk.choices[0]?.delta ?? {}
 
 				if (delta.content) {
@@ -215,6 +224,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				yield this.processUsageMetrics(lastUsage, modelInfo)
 			}
 		} else {
+			console.log("[DEBUG] createMessage (non-streaming) called.")
 			// o1 for instance doesnt support streaming, non-1 temp, or system prompt
 			const systemMessage: OpenAI.Chat.ChatCompletionUserMessageParam = {
 				role: "user",
@@ -230,8 +240,16 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 						: [systemMessage, ...convertToOpenAiMessages(messages)],
 			}
 
+			console.log(
+				"[DEBUG] Request options (createMessage non-streaming):",
+				JSON.stringify(requestOptions, null, 2),
+			)
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
+				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
+			} else {
+				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// Add max_tokens if needed
@@ -241,6 +259,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				requestOptions,
 				this._isAzureAiInference(modelUrl) ? { path: OPENAI_AZURE_AI_INFERENCE_PATH } : {},
 			)
+			console.log("[DEBUG] createMessage non-streaming response received:", JSON.stringify(response, null, 2))
 
 			yield {
 				type: "text",
@@ -270,6 +289,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 	async completePrompt(prompt: string): Promise<string> {
 		try {
+			console.log("[DEBUG] completePrompt called.")
 			const isAzureAiInference = this._isAzureAiInference(this.options.openAiBaseUrl)
 			const model = this.getModel()
 			const modelInfo = model.info
@@ -279,8 +299,13 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				messages: [{ role: "user", content: prompt }],
 			}
 
+			console.log("[DEBUG] Request options (completePrompt):", JSON.stringify(requestOptions, null, 2))
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
+				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
+			} else {
+				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// Add max_tokens if needed
@@ -290,6 +315,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				requestOptions,
 				isAzureAiInference ? { path: OPENAI_AZURE_AI_INFERENCE_PATH } : {},
 			)
+			console.log("[DEBUG] completePrompt response received:", JSON.stringify(response, null, 2))
 
 			return response.choices[0]?.message.content || ""
 		} catch (error) {
@@ -327,8 +353,16 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				temperature: undefined,
 			}
 
+			console.log(
+				"[DEBUG] Request options (handleO3FamilyMessage streaming):",
+				JSON.stringify(requestOptions, null, 2),
+			)
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
+				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
+				console.log("[DEBUG] Full request options:", JSON.stringify(requestOptions, null, 2))
+			} else {
+				console.log("[DEBUG] Service tier not set or is 'auto'. Current value:", this.options.serviceTier)
 			}
 
 			// O3 family models do not support the deprecated max_tokens parameter
@@ -340,6 +374,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				requestOptions,
 				methodIsAzureAiInference ? { path: OPENAI_AZURE_AI_INFERENCE_PATH } : {},
 			)
+			console.log("[DEBUG] handleO3FamilyMessage streaming response initiated.")
 
 			yield* this.handleStreamResponse(stream)
 		} else {
@@ -356,6 +391,10 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				temperature: undefined,
 			}
 
+			console.log(
+				"[DEBUG] Request options (handleO3FamilyMessage non-streaming):",
+				JSON.stringify(requestOptions, null, 2),
+			)
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
 				console.log("[DEBUG] Setting service_tier parameter:", this.options.serviceTier)
@@ -373,6 +412,10 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 				requestOptions,
 				methodIsAzureAiInference ? { path: OPENAI_AZURE_AI_INFERENCE_PATH } : {},
 			)
+			console.log(
+				"[DEBUG] Response received (handleO3FamilyMessage non-streaming):",
+				JSON.stringify(response, null, 2),
+			)
 
 			yield {
 				type: "text",
@@ -384,6 +427,7 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 	private async *handleStreamResponse(stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>): ApiStream {
 		for await (const chunk of stream) {
+			console.log("[DEBUG] handleStreamResponse chunk received:", JSON.stringify(chunk, null, 2))
 			const delta = chunk.choices[0]?.delta
 			if (delta?.content) {
 				yield {
