@@ -400,6 +400,26 @@ export class CustomModesManager {
 		return mergedModes
 	}
 
+	public async getEnabledModes(): Promise<string[]> {
+		const allModes = await this.getCustomModes()
+		const persistedEnabledModes = this.context.globalState.get<string[]>("enabledModes")
+
+		// Build set of available mode slugs for reconciliation
+		const allModeSlugs = new Set(allModes.map((mode) => mode.slug))
+
+		// If nothing was ever persisted (undefined), return the full list of available modes
+		// Do NOT mutate globalState here; reads should not cause side-effects. Persisting
+		// should be the responsibility of explicit user actions (e.g. via UI).
+		if (persistedEnabledModes === undefined) {
+			return allModes.map((m) => m.slug)
+		}
+
+		// Otherwise, reconcile the persisted list with currently available modes and return it
+		// Do not persist reconciliation here for the same reason (avoid unexpected writes on read).
+		const reconciledEnabledModes = persistedEnabledModes.filter((slug) => allModeSlugs.has(slug))
+		return reconciledEnabledModes
+	}
+
 	public async updateCustomMode(slug: string, config: ModeConfig): Promise<void> {
 		try {
 			// Validate the mode configuration before saving

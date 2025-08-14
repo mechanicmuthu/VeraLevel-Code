@@ -14,7 +14,7 @@ import { ExtensionMessage, ExtensionState, MarketplaceInstalledMetadata, Command
 import { findLastIndex } from "@roo/array"
 import { McpServer } from "@roo/mcp"
 import { checkExistKey } from "@roo/checkExistApiConfig"
-import { Mode, defaultModeSlug, defaultPrompts } from "@roo/modes"
+import { Mode, defaultModeSlug, defaultPrompts, getAllModes } from "@roo/modes"
 import { CustomSupportPrompts } from "@roo/support-prompt"
 import { experimentDefault } from "@roo/experiments"
 import { TelemetrySetting } from "@roo/TelemetrySetting"
@@ -24,6 +24,8 @@ import { vscode } from "@src/utils/vscode"
 import { convertTextMateToHljs } from "@src/utils/textMateToHljs"
 
 export interface ExtensionStateContextType extends ExtensionState {
+	enabledModes: string[]
+	setEnabledModes: (value: string[]) => void
 	historyPreviewCollapsed?: boolean // Add the new state property
 	didHydrateState: boolean
 	showWelcome: boolean
@@ -269,6 +271,39 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		global: {},
 	})
 	const [includeTaskHistoryInEnhance, setIncludeTaskHistoryInEnhance] = useState(false)
+	const [enabledModes, setEnabledModesState] = useState<string[]>([])
+
+	useEffect(() => {
+		// Initialize enabledModes from the extension-provided state if available.
+		// We only default to enabling all available modes when the UI hasn't
+		// yet been hydrated from the extension host (first-time load). If the
+		// extension has already provided an explicit enabledModes array (even
+		// an empty array), we respect it and do not force-enable all modes.
+		const allModeSlugs = getAllModes(state.customModes).map((mode) => mode.slug)
+		setEnabledModesState((currentEnabledModes) => {
+			// Keep only modes that still exist
+			const allSlugsSet = new Set(allModeSlugs)
+			const relevantEnabledModes = currentEnabledModes.filter((slug) => allSlugsSet.has(slug))
+
+			// If there were no enabled modes in local state AND we haven't yet
+			// hydrated from the extension, enable all by default. Once the
+			// extension hydrates the UI it will overwrite this value if needed.
+			if (relevantEnabledModes.length === 0 && !didHydrateState) {
+				return allModeSlugs
+			}
+
+			// Otherwise keep previously selected ones and drop deleted modes
+			return relevantEnabledModes
+		})
+	}, [state.customModes, didHydrateState])
+
+	// Setter that persists enabledModes to the extension host and updates local state
+	const setEnabledModes = useCallback((enabled: string[]) => {
+		setEnabledModesState(enabled)
+		// Persist to extension host so the backend and system prompt generator
+		// use the canonical list. The extension listens for "updateEnabledModes" messages.
+		vscode.postMessage({ type: "updateEnabledModes", enabledModes: enabled })
+	}, [])
 
 	const setListApiConfigMeta = useCallback(
 		(value: ProviderSettingsEntry[]) => setState((prevState) => ({ ...prevState, listApiConfigMeta: value })),
@@ -294,6 +329,10 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 					setState((prevState) => mergeExtensionState(prevState, newState))
 					setShowWelcome(!checkExistKey(newState.apiConfiguration))
 					setDidHydrateState(true)
+					// Initialize enabledModes from extension state if provided (don't repost)
+					if ((newState as any).enabledModes !== undefined) {
+						setEnabledModesState((newState as any).enabledModes || [])
+					}
 					// Update alwaysAllowFollowupQuestions if present in state message
 					if ((newState as any).alwaysAllowFollowupQuestions !== undefined) {
 						setAlwaysAllowFollowupQuestions((newState as any).alwaysAllowFollowupQuestions)
@@ -390,6 +429,8 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 
 	const contextValue: ExtensionStateContextType = {
 		...state,
+		enabledModes,
+		setEnabledModes,
 		didHydrateState,
 		showWelcome,
 		theme,

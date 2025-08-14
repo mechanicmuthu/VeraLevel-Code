@@ -61,8 +61,20 @@ export async function switchModeTool(
 				return
 			}
 
+			// Before switching, check if the requested mode is enabled in provider state.
+			// We do this here so the tool result returned to the LLM reflects the
+			// disallowed switch (rather than only showing a GUI warning).
+			const provider = cline.providerRef.deref()
+			const enabledModes = (await provider?.getState())?.enabledModes
+
+			if (enabledModes && enabledModes.length > 0 && !enabledModes.includes(mode_slug)) {
+				cline.recordToolError("switch_mode")
+				pushToolResult(formatResponse.toolError(`Mode '${mode_slug}' is disabled and cannot be selected.`))
+				return
+			}
+
 			// Switch the mode using shared handler
-			await cline.providerRef.deref()?.handleModeSwitch(mode_slug)
+			await provider?.handleModeSwitch(mode_slug)
 
 			pushToolResult(
 				`Successfully switched from ${getModeBySlug(currentMode)?.name ?? currentMode} mode to ${

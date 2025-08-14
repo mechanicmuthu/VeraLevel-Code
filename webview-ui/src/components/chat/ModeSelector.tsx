@@ -43,7 +43,7 @@ export const ModeSelector = ({
 	const [searchValue, setSearchValue] = React.useState("")
 	const searchInputRef = React.useRef<HTMLInputElement>(null)
 	const portalContainer = useRooPortal("roo-portal")
-	const { hasOpenedModeSelector, setHasOpenedModeSelector } = useExtensionState()
+	const { hasOpenedModeSelector, setHasOpenedModeSelector, enabledModes, setEnabledModes } = useExtensionState()
 	const { t } = useAppTranslation()
 
 	const trackModeSelectorOpened = React.useCallback(() => {
@@ -57,7 +57,9 @@ export const ModeSelector = ({
 		}
 	}, [hasOpenedModeSelector, setHasOpenedModeSelector])
 
-	// Get all modes including custom modes and merge custom prompt descriptions
+	// Get all modes including custom modes and merge custom prompt descriptions.
+	// Do NOT filter by `enabledModes` here — the checkbox reflects enabled state.
+	// This keeps deselected modes visible so users can reselect them.
 	const modes = React.useMemo(() => {
 		const allModes = getAllModes(customModes)
 		return allModes.map((mode) => ({
@@ -132,6 +134,16 @@ export const ModeSelector = ({
 			setSearchValue("")
 		},
 		[onChange],
+	)
+
+	const handleToggleMode = React.useCallback(
+		(modeSlug: string) => {
+			const newEnabledModes = enabledModes.includes(modeSlug)
+				? enabledModes.filter((slug) => slug !== modeSlug)
+				: [...enabledModes, modeSlug]
+			setEnabledModes(newEnabledModes)
+		},
+		[enabledModes, setEnabledModes],
 	)
 
 	const onOpenChange = React.useCallback(
@@ -228,16 +240,23 @@ export const ModeSelector = ({
 								{filteredModes.map((mode) => (
 									<div
 										key={mode.slug}
-										onClick={() => handleSelect(mode.slug)}
 										className={cn(
-											"px-3 py-1.5 text-sm cursor-pointer flex items-center",
+											"px-3 py-1.5 text-sm flex items-center",
 											"hover:bg-vscode-list-hoverBackground",
 											mode.slug === value
 												? "bg-vscode-list-activeSelectionBackground text-vscode-list-activeSelectionForeground"
 												: "",
 										)}
 										data-testid="mode-selector-item">
-										<div className="flex-1 min-w-0">
+										<input
+											type="checkbox"
+											checked={enabledModes.includes(mode.slug)}
+											onChange={() => handleToggleMode(mode.slug)}
+											className="mr-2"
+										/>
+										<div
+											className="flex-1 min-w-0 cursor-pointer"
+											onClick={() => handleSelect(mode.slug)}>
 											<div className="font-bold truncate">{mode.name}</div>
 											{mode.description && (
 												<div className="text-xs text-vscode-descriptionForeground truncate">

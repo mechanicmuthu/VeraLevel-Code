@@ -105,6 +105,7 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 		followupAutoApproveTimeoutMs,
 		mode,
 		setMode,
+		enabledModes,
 		autoApprovalEnabled,
 		alwaysAllowModeSwitch,
 		alwaysAllowSubtasks,
@@ -1697,21 +1698,23 @@ const ChatViewComponent: React.ForwardRefRenderFunction<ChatViewRef, ChatViewPro
 
 	// Function to handle mode switching
 	const switchToNextMode = useCallback(() => {
-		const allModes = getAllModes(customModes)
+		const allModes = getAllModes(customModes, enabledModes)
+		if (!allModes.length) return // nothing to switch to
 		const currentModeIndex = allModes.findIndex((m) => m.slug === mode)
 		const nextModeIndex = (currentModeIndex + 1) % allModes.length
 		// Update local state and notify extension to sync mode change
 		switchToMode(allModes[nextModeIndex].slug)
-	}, [mode, customModes, switchToMode])
+	}, [mode, customModes, switchToMode, enabledModes])
 
 	// Function to handle switching to previous mode
 	const switchToPreviousMode = useCallback(() => {
-		const allModes = getAllModes(customModes)
+		const allModes = getAllModes(customModes, enabledModes)
+		if (!allModes.length) return // nothing to switch to
 		const currentModeIndex = allModes.findIndex((m) => m.slug === mode)
 		const previousModeIndex = (currentModeIndex - 1 + allModes.length) % allModes.length
 		// Update local state and notify extension to sync mode change
 		switchToMode(allModes[previousModeIndex].slug)
-	}, [mode, customModes, switchToMode])
+	}, [mode, customModes, switchToMode, enabledModes])
 
 	// Add keyboard event handler
 	const handleKeyDown = useCallback(

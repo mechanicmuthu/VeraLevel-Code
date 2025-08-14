@@ -1027,6 +1027,24 @@ export class ClineProvider
 	 * @param newMode The mode to switch to
 	 */
 	public async handleModeSwitch(newMode: Mode) {
+		// Ensure the requested mode is currently enabled in settings
+		// Prefer the cached/global state via ContextProxy (getGlobalState) and only
+		// fall back to CustomModesManager.getEnabledModes() which may default to
+		// enabling all modes when the persisted value is missing.
+		const enabledModes = this.getGlobalState("enabledModes") ?? (await this.customModesManager.getEnabledModes())
+
+		// Debug log to capture mode switch attempts and the enabledModes used to decide.
+		console.debug(`[handleModeSwitch] requested=${newMode} enabledModes=${JSON.stringify(enabledModes)}`)
+		try {
+			this.log?.(`[handleModeSwitch] requested=${newMode} enabledModes=${JSON.stringify(enabledModes)}`)
+		} catch (e) {
+			// ignore
+		}
+		if (enabledModes && enabledModes.length > 0 && !enabledModes.includes(newMode)) {
+			// Mode is disabled; inform the user and don't switch
+			vscode.window.showWarningMessage(`Mode '${newMode}' is disabled and cannot be selected.`)
+			return
+		}
 		const cline = this.getCurrentCline()
 
 		if (cline) {
@@ -1701,6 +1719,7 @@ export class ClineProvider
 			maxDiagnosticMessages,
 			includeTaskHistoryInEnhance,
 			remoteControlEnabled,
+			enabledModes, // Add enabledModes to destructuring
 		} = await this.getState()
 
 		const telemetryKey = process.env.POSTHOG_API_KEY
@@ -2018,6 +2037,9 @@ export class ClineProvider
 			includeTaskHistoryInEnhance: stateValues.includeTaskHistoryInEnhance ?? false,
 			// Add remoteControlEnabled setting
 			remoteControlEnabled: stateValues.remoteControlEnabled ?? false,
+			// Use persisted enabledModes from ContextProxy/global state when available
+			// to avoid defaulting to enabling all modes unexpectedly.
+			enabledModes: this.getGlobalState("enabledModes") ?? (await this.customModesManager.getEnabledModes()),
 		}
 	}
 
@@ -2049,6 +2071,11 @@ export class ClineProvider
 
 	public async setValue<K extends keyof RooCodeSettings>(key: K, value: RooCodeSettings[K]) {
 		await this.contextProxy.setValue(key, value)
+	}
+
+	public async updateEnabledModes(enabledModes: string[]) {
+		await this.contextProxy.setValue("enabledModes", enabledModes)
+		await this.postStateToWebview()
 	}
 
 	public getValue<K extends keyof RooCodeSettings>(key: K) {

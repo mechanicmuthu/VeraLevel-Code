@@ -41,6 +41,21 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 
 	const mode = message.mode ?? defaultModeSlug
 	const customModes = await provider.customModesManager.getCustomModes()
+	// Use enabledModes from provider state (ContextProxy) when available; this
+	// prevents CustomModesManager from defaulting to enabling all modes.
+	const state = await provider.getState()
+	const { enabledModes } = state
+
+	// Light-weight debug log to help trace which enabledModes are used when
+	// generating the system prompt. Use both console.debug and provider.log so
+	// the message is visible in both the node console and the VS Code Output
+	// channel for the extension.
+	console.debug(`[generateSystemPrompt] enabledModes=${JSON.stringify(enabledModes)}`)
+	try {
+		provider.log?.(`[generateSystemPrompt] enabledModes=${JSON.stringify(enabledModes)}`)
+	} catch (e) {
+		// ignore
+	}
 
 	const rooIgnoreInstructions = provider.getCurrentCline()?.rooIgnoreController?.getInstructions()
 
@@ -85,6 +100,7 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 			maxConcurrentFileReads: maxConcurrentFileReads ?? 5,
 			todoListEnabled: apiConfiguration?.todoListEnabled ?? true,
 			useAgentRules: vscode.workspace.getConfiguration("roo-cline").get<boolean>("useAgentRules") ?? true,
+			enabledModes,
 		},
 	)
 

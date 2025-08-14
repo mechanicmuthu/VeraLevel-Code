@@ -6,12 +6,12 @@ import type { ModeConfig } from "@roo-code/types"
 
 import { getAllModesWithPrompts } from "../../../shared/modes"
 
-export async function getModesSection(context: vscode.ExtensionContext): Promise<string> {
+export async function getModesSection(context: vscode.ExtensionContext, enabledModes?: string[]): Promise<string> {
 	const settingsDir = path.join(context.globalStorageUri.fsPath, "settings")
 	await fs.mkdir(settingsDir, { recursive: true })
 
-	// Get all modes with their overrides from extension state
-	const allModes = await getAllModesWithPrompts(context)
+	// Get all modes with their overrides from extension state, optionally filtering by enabledModes
+	const allModes = await getAllModesWithPrompts(context, enabledModes)
 
 	let modesContent = `====
 

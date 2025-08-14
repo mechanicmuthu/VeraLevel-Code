@@ -69,9 +69,18 @@ async function generatePrompt(
 	// If diff is disabled, don't pass the diffStrategy
 	const effectiveDiffStrategy = diffEnabled ? diffStrategy : undefined
 
+	const enabledCustomModes =
+		settings?.enabledModes && customModeConfigs
+			? customModeConfigs.filter((m) => settings.enabledModes?.includes(m.slug))
+			: customModeConfigs
+
 	// Get the full mode config to ensure we have the role definition (used for groups, etc.)
-	const modeConfig = getModeBySlug(mode, customModeConfigs) || modes.find((m) => m.slug === mode) || modes[0]
-	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, customModeConfigs)
+	const modeConfig =
+		getModeBySlug(mode, enabledCustomModes) ||
+		modes.find((m) => m.slug === mode) ||
+		modes.find((m) => m.slug === defaultModeSlug) ||
+		modes[0]
+	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, enabledCustomModes)
 
 	// Check if MCP functionality should be included
 	const hasMcpGroup = modeConfig.groups.some((groupEntry) => getGroupName(groupEntry) === "mcp")
@@ -79,7 +88,7 @@ async function generatePrompt(
 	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
 
 	const [modesSection, mcpServersSection] = await Promise.all([
-		getModesSection(context),
+		getModesSection(context, settings?.enabledModes),
 		shouldIncludeMcp
 			? getMcpServersSection(mcpHub, effectiveDiffStrategy, enableMcpServerCreation)
 			: Promise.resolve(""),
@@ -101,7 +110,7 @@ ${getToolDescriptionsForMode(
 	effectiveDiffStrategy,
 	browserViewportSize,
 	shouldIncludeMcp ? mcpHub : undefined,
-	customModeConfigs,
+	enabledCustomModes,
 	experiments,
 	partialReadsEnabled,
 	settings,
@@ -169,14 +178,22 @@ export const SYSTEM_PROMPT = async (
 	const promptComponent = getPromptComponent(customModePrompts, mode)
 
 	// Get full mode config from custom modes or fall back to built-in modes
-	const currentMode = getModeBySlug(mode, customModes) || modes.find((m) => m.slug === mode) || modes[0]
+	const enabledCustomModes =
+		settings?.enabledModes && customModes
+			? customModes.filter((m) => settings.enabledModes?.includes(m.slug))
+			: customModes
+	const currentMode =
+		getModeBySlug(mode, enabledCustomModes) ||
+		modes.find((m) => m.slug === mode) ||
+		modes.find((m) => m.slug === defaultModeSlug) ||
+		modes[0]
 
 	// If a file-based custom system prompt exists, use it
 	if (fileCustomSystemPrompt) {
 		const { roleDefinition, baseInstructions: baseInstructionsForFile } = getModeSelection(
 			mode,
 			promptComponent,
-			customModes,
+			enabledCustomModes,
 		)
 
 		const customInstructions = await addCustomInstructions(
@@ -211,7 +228,7 @@ ${customInstructions}`
 		effectiveDiffStrategy,
 		browserViewportSize,
 		promptComponent,
-		customModes,
+		enabledCustomModes,
 		globalCustomInstructions,
 		diffEnabled,
 		experiments,

@@ -27,6 +27,7 @@ export interface WebviewMessage {
 		| "updateTodoList"
 		| "deleteMultipleTasksWithIds"
 		| "currentApiConfigName"
+		| "updateEnabledModes"
 		| "saveApiConfiguration"
 		| "upsertApiConfiguration"
 		| "deleteApiConfiguration"
@@ -220,6 +221,7 @@ export interface WebviewMessage {
 	askResponse?: ClineAskResponse
 	apiConfiguration?: ProviderSettings
 	images?: string[]
+	enabledModes?: string[]
 	bool?: boolean
 	value?: number
 	commands?: string[]

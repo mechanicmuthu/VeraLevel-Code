@@ -86,25 +86,30 @@ export function getModeConfig(slug: string, customModes?: ModeConfig[]): ModeCon
 }
 
 // Get all available modes, with custom modes overriding built-in modes
-export function getAllModes(customModes?: ModeConfig[]): ModeConfig[] {
+export function getAllModes(customModes?: ModeConfig[], enabledModes?: string[]): ModeConfig[] {
+	let allModes: ModeConfig[] = []
 	if (!customModes?.length) {
-		return [...modes]
+		allModes = [...modes]
+	} else {
+		// Start with built-in modes
+		allModes = [...modes]
+
+		// Process custom modes
+		customModes.forEach((customMode) => {
+			const index = allModes.findIndex((mode) => mode.slug === customMode.slug)
+			if (index !== -1) {
+				// Override existing mode
+				allModes[index] = customMode
+			} else {
+				// Add new mode
+				allModes.push(customMode)
+			}
+		})
 	}
 
-	// Start with built-in modes
-	const allModes = [...modes]
-
-	// Process custom modes
-	customModes.forEach((customMode) => {
-		const index = allModes.findIndex((mode) => mode.slug === customMode.slug)
-		if (index !== -1) {
-			// Override existing mode
-			allModes[index] = customMode
-		} else {
-			// Add new mode
-			allModes.push(customMode)
-		}
-	})
+	if (enabledModes) {
+		return allModes.filter((mode) => enabledModes.includes(mode.slug))
+	}
 
 	return allModes
 }
@@ -284,11 +289,14 @@ export const defaultPrompts: Readonly<CustomModePrompts> = Object.freeze(
 )
 
 // Helper function to get all modes with their prompt overrides from extension state
-export async function getAllModesWithPrompts(context: vscode.ExtensionContext): Promise<ModeConfig[]> {
+export async function getAllModesWithPrompts(
+	context: vscode.ExtensionContext,
+	enabledModes?: string[],
+): Promise<ModeConfig[]> {
 	const customModes = (await context.globalState.get<ModeConfig[]>("customModes")) || []
 	const customModePrompts = (await context.globalState.get<CustomModePrompts>("customModePrompts")) || {}
 
-	const allModes = getAllModes(customModes)
+	const allModes = getAllModes(customModes, enabledModes)
 	return allModes.map((mode) => ({
 		...mode,
 		roleDefinition: customModePrompts[mode.slug]?.roleDefinition ?? mode.roleDefinition,

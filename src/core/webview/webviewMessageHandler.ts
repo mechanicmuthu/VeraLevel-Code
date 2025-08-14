@@ -325,6 +325,31 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("alwaysAllowMcp", message.bool)
 			await provider.postStateToWebview()
 			break
+		case "updateEnabledModes":
+			if (Array.isArray(message.enabledModes)) {
+				try {
+					provider.log?.(
+						`[webviewMessageHandler] updateEnabledModes received. incoming=${JSON.stringify(message.enabledModes)}`,
+					)
+				} catch (e) {
+					// ignore
+				}
+				// Debug logging to capture enabledModes updates and detect races.
+				try {
+					const before = getGlobalState("enabledModes")
+					console.debug(
+						`[webviewMessageHandler] updateEnabledModes received. before=${JSON.stringify(before)} incoming=${JSON.stringify(message.enabledModes)}`,
+					)
+				} catch (e) {
+					// ignore logging errors
+				}
+				await updateGlobalState("enabledModes", message.enabledModes)
+				await provider.postStateToWebview()
+				console.debug(
+					`[webviewMessageHandler] updateEnabledModes persisted. after=${JSON.stringify(await getGlobalState("enabledModes"))}`,
+				)
+			}
+			break
 		case "alwaysAllowModeSwitch":
 			await updateGlobalState("alwaysAllowModeSwitch", message.bool)
 			await provider.postStateToWebview()
