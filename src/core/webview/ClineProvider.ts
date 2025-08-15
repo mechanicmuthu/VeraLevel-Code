@@ -1083,7 +1083,7 @@ export class ClineProvider
 			vscode.window.showWarningMessage(`Mode '${newMode}' is disabled and cannot be selected.`)
 			return
 		}
-		const cline = this.getCurrentCline()
+		const cline = this.getCurrentTask()
 
 		if (cline) {
 			TelemetryService.instance.captureModeSwitch(cline.taskId, newMode)
