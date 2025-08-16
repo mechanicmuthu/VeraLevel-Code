@@ -69,7 +69,27 @@ export async function switchModeTool(
 
 			if (enabledModes && enabledModes.length > 0 && !enabledModes.includes(mode_slug)) {
 				cline.recordToolError("switch_mode")
-				pushToolResult(formatResponse.toolError(`Mode '${mode_slug}' is disabled and cannot be selected.`))
+				// Build a concise refresher of available modes (ONLY slugs). Do not add
+				// suggestions or extra guidance — just the list. This ensures we never
+				// echo display names back as machine-readable tokens.
+				try {
+					const allModes = (await provider?.customModesManager.getCustomModes()) || []
+					// Use the enabledModes array directly (these are slugs), but ensure they
+					// exist in the combined set so we don't show stale entries.
+					const allModeSlugs = new Set(allModes.map((m) => m.slug))
+					// Include built-in enabled slugs as-is. If a slug isn't found in
+					// custom modes, it's still valid and will be shown.
+					const availableSlugs = enabledModes
+						.filter((s) => true) // keep order from enabledModes
+						.map((s) => s)
+						.join("\n")
+
+					const message = `Mode '${mode_slug}' is disabled and cannot be selected.\n\nAvailable modes:\n${availableSlugs}`
+					pushToolResult(formatResponse.toolError(message))
+				} catch (e) {
+					// Fallback to simple message if anything goes wrong while building the list
+					pushToolResult(formatResponse.toolError(`Mode '${mode_slug}' is disabled and cannot be selected.`))
+				}
 				return
 			}
 

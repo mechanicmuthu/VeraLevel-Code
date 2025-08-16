@@ -69,17 +69,20 @@ async function generatePrompt(
 	// If diff is disabled, don't pass the diffStrategy
 	const effectiveDiffStrategy = diffEnabled ? diffStrategy : undefined
 
+	// Only include custom modes that are explicitly enabled. If enabledModes is
+	// undefined (not yet hydrated), treat it as an explicit empty selection to
+	// avoid accidentally exposing all custom modes to the LLM.
 	const enabledCustomModes =
 		settings?.enabledModes && customModeConfigs
 			? customModeConfigs.filter((m) => settings.enabledModes?.includes(m.slug))
-			: customModeConfigs
+			: []
 
 	// Get the full mode config to ensure we have the role definition (used for groups, etc.)
+	// Important: do NOT fall back to a built-in mode that is not enabled. If the
+	// requested mode isn't among the enabled custom modes, fall back to the
+	// default mode to avoid exposing disabled built-in modes.
 	const modeConfig =
-		getModeBySlug(mode, enabledCustomModes) ||
-		modes.find((m) => m.slug === mode) ||
-		modes.find((m) => m.slug === defaultModeSlug) ||
-		modes[0]
+		getModeBySlug(mode, enabledCustomModes) || modes.find((m) => m.slug === defaultModeSlug) || modes[0]
 	const { roleDefinition, baseInstructions } = getModeSelection(mode, promptComponent, enabledCustomModes)
 
 	// Check if MCP functionality should be included
@@ -88,7 +91,9 @@ async function generatePrompt(
 	const shouldIncludeMcp = hasMcpGroup && hasMcpServers
 
 	const [modesSection, mcpServersSection] = await Promise.all([
-		getModesSection(context, settings?.enabledModes),
+		// Pass an explicit empty array when enabledModes is undefined so the
+		// modes section does not list everything by default.
+		getModesSection(context, settings?.enabledModes ?? []),
 		shouldIncludeMcp
 			? getMcpServersSection(mcpHub, effectiveDiffStrategy, enableMcpServerCreation)
 			: Promise.resolve(""),

@@ -414,10 +414,16 @@ export class CustomModesManager {
 			return allModes.map((m) => m.slug)
 		}
 
-		// Otherwise, reconcile the persisted list with currently available modes and return it
-		// Do not persist reconciliation here for the same reason (avoid unexpected writes on read).
-		const reconciledEnabledModes = persistedEnabledModes.filter((slug) => allModeSlugs.has(slug))
-		return reconciledEnabledModes
+		// Otherwise, reconcile the persisted list with currently available modes and return it.
+		// IMPORTANT: include any newly-added mode slugs so that new custom modes are
+		// enabled by default. We still respect explicit user choices (if they removed
+		// modes from persistedEnabledModes they remain removed), but any mode that
+		// exists now and wasn't part of persisted list will be added to the returned
+		// array. Do not persist this reconciliation here.
+		const persistedFiltered = persistedEnabledModes.filter((slug) => allModeSlugs.has(slug))
+		const newSlugs = Array.from(allModeSlugs).filter((slug) => !persistedEnabledModes.includes(slug))
+
+		return [...persistedFiltered, ...newSlugs]
 	}
 
 	public async updateCustomMode(slug: string, config: ModeConfig): Promise<void> {

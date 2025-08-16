@@ -1071,13 +1071,7 @@ export class ClineProvider
 		// enabling all modes when the persisted value is missing.
 		const enabledModes = this.getGlobalState("enabledModes") ?? (await this.customModesManager.getEnabledModes())
 
-		// Debug log to capture mode switch attempts and the enabledModes used to decide.
-		console.debug(`[handleModeSwitch] requested=${newMode} enabledModes=${JSON.stringify(enabledModes)}`)
-		try {
-			this.log?.(`[handleModeSwitch] requested=${newMode} enabledModes=${JSON.stringify(enabledModes)}`)
-		} catch (e) {
-			// ignore
-		}
+		// Do not log enabledModes here to avoid verbose debug output in production.
 		if (enabledModes && enabledModes.length > 0 && !enabledModes.includes(newMode)) {
 			// Mode is disabled; inform the user and don't switch
 			vscode.window.showWarningMessage(`Mode '${newMode}' is disabled and cannot be selected.`)

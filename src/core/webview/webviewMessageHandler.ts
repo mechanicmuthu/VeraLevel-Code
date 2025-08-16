@@ -45,7 +45,7 @@ import { openMention } from "../mentions"
 import { TelemetrySetting } from "../../shared/TelemetrySetting"
 import { getWorkspacePath } from "../../utils/path"
 import { ensureSettingsDirectoryExists } from "../../utils/globalContext"
-import { Mode, defaultModeSlug } from "../../shared/modes"
+import { Mode, defaultModeSlug, getAllModes } from "../../shared/modes"
 import { getModels, flushModels } from "../../api/providers/fetchers/modelCache"
 import { GetModelsOptions } from "../../shared/api"
 import { generateSystemPrompt } from "./generateSystemPrompt"
@@ -325,31 +325,43 @@ export const webviewMessageHandler = async (
 			await updateGlobalState("alwaysAllowMcp", message.bool)
 			await provider.postStateToWebview()
 			break
-		case "updateEnabledModes":
-			if (Array.isArray(message.enabledModes)) {
-				try {
-					provider.log?.(
-						`[webviewMessageHandler] updateEnabledModes received. incoming=${JSON.stringify(message.enabledModes)}`,
-					)
-				} catch (e) {
-					// ignore
-				}
-				// Debug logging to capture enabledModes updates and detect races.
-				try {
-					const before = getGlobalState("enabledModes")
-					console.debug(
-						`[webviewMessageHandler] updateEnabledModes received. before=${JSON.stringify(before)} incoming=${JSON.stringify(message.enabledModes)}`,
-					)
-				} catch (e) {
-					// ignore logging errors
-				}
-				await updateGlobalState("enabledModes", message.enabledModes)
-				await provider.postStateToWebview()
-				console.debug(
-					`[webviewMessageHandler] updateEnabledModes persisted. after=${JSON.stringify(await getGlobalState("enabledModes"))}`,
-				)
+		case "updateEnabledModes": {
+			if (!Array.isArray(message.enabledModes)) {
+				break
 			}
+
+			const incoming = (message.enabledModes || []).filter((s: any) => typeof s === "string") as string[]
+			// Compute available mode slugs from built-in + custom modes
+			const customModes = await provider.customModesManager.getCustomModes()
+			const availableSlugs = getAllModes(customModes).map((m) => m.slug)
+
+			// Reconcile incoming enabledModes with currently available modes
+			const reconciled = incoming.filter((s) => availableSlugs.includes(s))
+
+			// Prevent disabling all modes
+			if (reconciled.length === 0) {
+				const previous = (await getGlobalState("enabledModes")) as string[] | undefined
+				vscode.window.showWarningMessage(
+					"At least one mode must be enabled. Keeping the previous enabled modes.",
+				)
+				await provider.postStateToWebview()
+				break
+			}
+
+			// Persist reconciled list
+			await updateGlobalState("enabledModes", reconciled)
+
+			// If the current mode was disabled, auto-switch to the first enabled mode
+			const currentMode = (await getGlobalState("mode")) as string | undefined
+			if (currentMode && !reconciled.includes(currentMode)) {
+				const fallbackMode = reconciled[0]
+				await provider.handleModeSwitch(fallbackMode as any)
+			} else {
+				await provider.postStateToWebview()
+			}
+
 			break
+		}
 		case "alwaysAllowModeSwitch":
 			await updateGlobalState("alwaysAllowModeSwitch", message.bool)
 			await provider.postStateToWebview()

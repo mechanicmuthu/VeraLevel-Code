@@ -136,14 +136,18 @@ export const ModeSelector = ({
 		[onChange],
 	)
 
+	// Guard against enabledModes being undefined (tests or contexts may omit it).
+	const safeEnabledModes = React.useMemo(() => enabledModes ?? [], [enabledModes])
+
 	const handleToggleMode = React.useCallback(
 		(modeSlug: string) => {
-			const newEnabledModes = enabledModes.includes(modeSlug)
-				? enabledModes.filter((slug) => slug !== modeSlug)
-				: [...enabledModes, modeSlug]
+			const current = safeEnabledModes
+			const newEnabledModes = current.includes(modeSlug)
+				? current.filter((slug) => slug !== modeSlug)
+				: [...current, modeSlug]
 			setEnabledModes(newEnabledModes)
 		},
-		[enabledModes, setEnabledModes],
+		[safeEnabledModes, setEnabledModes],
 	)
 
 	const onOpenChange = React.useCallback(
@@ -246,24 +250,51 @@ export const ModeSelector = ({
 											mode.slug === value
 												? "bg-vscode-list-activeSelectionBackground text-vscode-list-activeSelectionForeground"
 												: "",
+											!safeEnabledModes.includes(mode.slug)
+												? "opacity-60 cursor-not-allowed"
+												: "cursor-pointer",
 										)}
 										data-testid="mode-selector-item">
-										<input
-											type="checkbox"
-											checked={enabledModes.includes(mode.slug)}
-											onChange={() => handleToggleMode(mode.slug)}
-											className="mr-2"
-										/>
-										<div
-											className="flex-1 min-w-0 cursor-pointer"
-											onClick={() => handleSelect(mode.slug)}>
-											<div className="font-bold truncate">{mode.name}</div>
-											{mode.description && (
-												<div className="text-xs text-vscode-descriptionForeground truncate">
-													{mode.description}
-												</div>
-											)}
-										</div>
+										<StandardTooltip
+											content={
+												safeEnabledModes.includes(mode.slug)
+													? t("chat:modeSelector.checkboxTooltipDisable")
+													: t("chat:modeSelector.checkboxTooltipEnable")
+											}>
+											<input
+												type="checkbox"
+												checked={safeEnabledModes.includes(mode.slug)}
+												onChange={() => handleToggleMode(mode.slug)}
+												className="mr-2"
+											/>
+										</StandardTooltip>
+										<StandardTooltip
+											content={
+												!safeEnabledModes.includes(mode.slug)
+													? t("chat:modeSelector.rowDisabledTooltip")
+													: ""
+											}>
+											<div
+												className={cn(
+													"flex-1 min-w-0",
+													!safeEnabledModes.includes(mode.slug)
+														? "cursor-not-allowed"
+														: "cursor-pointer",
+												)}
+												onClick={() => {
+													// Prevent selecting a disabled mode via row click. The checkbox is
+													// still functional for enabling/disabling modes.
+													if (!safeEnabledModes.includes(mode.slug)) return
+													handleSelect(mode.slug)
+												}}>
+												<div className="font-bold truncate">{mode.name}</div>
+												{mode.description && (
+													<div className="text-xs text-vscode-descriptionForeground truncate">
+														{mode.description}
+													</div>
+												)}
+											</div>
+										</StandardTooltip>
 										{mode.slug === value && <Check className="ml-auto size-4 p-0.5" />}
 									</div>
 								))}

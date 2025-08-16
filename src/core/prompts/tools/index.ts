@@ -2,7 +2,7 @@ import type { ToolName, ModeConfig } from "@roo-code/types"
 
 import { TOOL_GROUPS, ALWAYS_AVAILABLE_TOOLS, DiffStrategy } from "../../../shared/tools"
 import { McpHub } from "../../../services/mcp/McpHub"
-import { Mode, getModeConfig, isToolAllowedForMode, getGroupName } from "../../../shared/modes"
+import { Mode, getModeBySlug, modes, isToolAllowedForMode, getGroupName } from "../../../shared/modes"
 
 import { ToolArgs } from "./types"
 import { getExecuteCommandDescription } from "./execute-command"
@@ -63,7 +63,14 @@ export function getToolDescriptionsForMode(
 	settings?: Record<string, any>,
 	enableMcpServerCreation?: boolean,
 ): string {
-	const config = getModeConfig(mode, customModes)
+	// Use a safe lookup for the mode config so we don't throw when callers
+	// pass a filtered customModes array (for example: enabled custom modes).
+	// getModeConfig throws when the slug cannot be found which can happen in
+	// a timing window during mode switches where the provider's current mode
+	// is set but the filtered customModes does not yet contain it. In
+	// streaming paths this would surface as an immediate failure. Instead,
+	// fall back to a built-in mode or the default mode.
+	const config = getModeBySlug(mode, customModes) || modes.find((m) => m.slug === mode) || modes[0]
 	const args: ToolArgs = {
 		cwd,
 		supportsComputerUse,

@@ -46,17 +46,6 @@ export const generateSystemPrompt = async (provider: ClineProvider, message: Web
 	const state = await provider.getState()
 	const { enabledModes } = state
 
-	// Light-weight debug log to help trace which enabledModes are used when
-	// generating the system prompt. Use both console.debug and provider.log so
-	// the message is visible in both the node console and the VS Code Output
-	// channel for the extension.
-	console.debug(`[generateSystemPrompt] enabledModes=${JSON.stringify(enabledModes)}`)
-	try {
-		provider.log?.(`[generateSystemPrompt] enabledModes=${JSON.stringify(enabledModes)}`)
-	} catch (e) {
-		// ignore
-	}
-
 	const rooIgnoreInstructions = provider.getCurrentTask()?.rooIgnoreController?.getInstructions()
 
 	// Determine if browser tools can be used based on model support, mode, and user settings
