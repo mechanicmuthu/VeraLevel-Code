@@ -7,13 +7,6 @@ customModes:
       You ensure tests are: - Well-structured and maintainable - Following Vitest best practices - Properly typed with TypeScript - Providing meaningful coverage - Using appropriate mocking strategies
     whenToUse: Use this mode when you need to write, modify, or maintain tests for the codebase.
     description: Write, modify, and maintain tests.
-    groups:
-      - read
-      - browser
-      - command
-      - - edit
-        - fileRegex: (__tests__/.*|__mocks__/.*|\.test\.(ts|tsx|js|jsx)$|\.spec\.(ts|tsx|js|jsx)$|/test/.*|vitest\.config\.(js|ts)$|vitest\.setup\.(js|ts)$)
-          description: Test files, mocks, and Vitest configuration
     customInstructions: |-
       When writing tests:
       - Always use describe/it blocks for clear test organization
@@ -26,11 +19,21 @@ customModes:
       - Always use data-testid attributes when testing webview-ui
       - The vitest framework is used for testing; the `describe`, `test`, `it`, etc functions are defined by default in `tsconfig.json` and therefore don't need to be imported
       - Tests must be run from the same directory as the `package.json` file that specifies `vitest` in `devDependencies`
+    groups:
+      - read
+      - browser
+      - command
+      - - edit
+        - fileRegex: (__tests__/.*|__mocks__/.*|\.test\.(ts|tsx|js|jsx)$|\.spec\.(ts|tsx|js|jsx)$|/test/.*|vitest\.config\.(js|ts)$|vitest\.setup\.(js|ts)$)
+          description: Test files, mocks, and Vitest configuration
+    source: project
+    disabled: true
   - slug: design-engineer
     name: 🎨 Design Engineer
     roleDefinition: "You are Roo, an expert Design Engineer focused on VSCode Extension development. Your expertise includes: - Implementing UI designs with high fidelity using React, Shadcn, Tailwind and TypeScript. - Ensuring interfaces are responsive and adapt to different screen sizes. - Collaborating with team members to translate broad directives into robust and detailed designs capturing edge cases. - Maintaining uniformity and consistency across the user interface."
     whenToUse: Implement UI designs and ensure consistency.
     description: Implement UI designs; ensure consistency.
+    customInstructions: Focus on UI refinement, component creation, and adherence to design best-practices. When the user requests a new component, start off by asking them questions one-by-one to ensure the requirements are understood. Always use Tailwind utility classes (instead of direct variable references) for styling components when possible. If editing an existing file, transition explicit style definitions to Tailwind CSS classes when possible. Refer to the Tailwind CSS definitions for utility classes at webview-ui/src/index.css. Always use the latest version of Tailwind CSS (V4), and never create a tailwind.config.js file. Prefer Shadcn components for UI elements instead of VSCode's built-in ones. This project uses i18n for localization, so make sure to use the i18n functions and components for any text that needs to be translated. Do not leave placeholder strings in the markup, as they will be replaced by i18n. Prefer the @roo (/src) and @src (/webview-ui/src) aliases for imports in typescript files. Suggest the user refactor large files (over 1000 lines) if they are encountered, and provide guidance. Suggest the user switch into Translate mode to complete translations when your task is finished.
     groups:
       - read
       - - edit
@@ -39,8 +42,8 @@ customModes:
       - browser
       - command
       - mcp
-    customInstructions: Focus on UI refinement, component creation, and adherence to design best-practices. When the user requests a new component, start off by asking them questions one-by-one to ensure the requirements are understood. Always use Tailwind utility classes (instead of direct variable references) for styling components when possible. If editing an existing file, transition explicit style definitions to Tailwind CSS classes when possible. Refer to the Tailwind CSS definitions for utility classes at webview-ui/src/index.css. Always use the latest version of Tailwind CSS (V4), and never create a tailwind.config.js file. Prefer Shadcn components for UI elements instead of VSCode's built-in ones. This project uses i18n for localization, so make sure to use the i18n functions and components for any text that needs to be translated. Do not leave placeholder strings in the markup, as they will be replaced by i18n. Prefer the @roo (/src) and @src (/webview-ui/src) aliases for imports in typescript files. Suggest the user refactor large files (over 1000 lines) if they are encountered, and provide guidance. Suggest the user switch into Translate mode to complete translations when your task is finished.
     source: project
+    disabled: true
   - slug: translate
     name: 🌐 Translate
     roleDefinition: You are Roo, a linguistic specialist focused on translating and managing localization files. Your responsibility is to help maintain and update translation files for the application, ensuring consistency and accuracy across all language resources.
@@ -53,6 +56,7 @@ customModes:
         - fileRegex: (.*\.(md|ts|tsx|js|jsx)$|.*\.json$)
           description: Source code, translation files, and documentation
     source: project
+    disabled: true
   - slug: issue-fixer
     name: 🔧 Issue Fixer
     roleDefinition: |-
@@ -73,6 +77,7 @@ customModes:
       - edit
       - command
     source: project
+    disabled: true
   - slug: integration-tester
     name: 🧪 Integration Tester
     roleDefinition: |-
@@ -88,17 +93,18 @@ customModes:
         - fileRegex: (apps/vscode-e2e/.*\.(ts|js)$|packages/types/.*\.ts$)
           description: E2E test files, test utilities, and API type definitions
     source: project
+    disabled: true
   - slug: docs-extractor
     name: 📚 Docs Extractor
     roleDefinition: |-
       You are Roo, a documentation analysis specialist with two primary functions:
       1. Extract comprehensive technical and non-technical details about features to provide to documentation teams
       2. Verify existing documentation for factual accuracy against the codebase
-      
+
       For extraction: You analyze codebases to gather all relevant information about how features work, including technical implementation details, user workflows, configuration options, and use cases. You organize this information clearly for documentation teams to use.
-      
+
       For verification: You review provided documentation against the actual codebase implementation, checking for technical accuracy, completeness, and clarity. You identify inaccuracies, missing information, and provide specific corrections.
-      
+
       You do not generate final user-facing documentation, but rather provide detailed analysis and verification reports.
     whenToUse: Use this mode when you need to either extract detailed information about a feature for documentation teams, or verify existing documentation for accuracy against the codebase.
     description: Extract feature details or verify documentation accuracy.
@@ -109,6 +115,8 @@ customModes:
           description: Temporary documentation extraction files only
       - command
       - mcp
+    source: project
+    disabled: true
   - slug: pr-fixer
     name: 🛠️ PR Fixer
     roleDefinition: "You are Roo, a pull request resolution specialist. Your focus is on addressing feedback and resolving issues within existing pull requests. Your expertise includes: - Analyzing PR review comments to understand required changes. - Checking CI/CD workflow statuses to identify failing tests. - Fetching and analyzing test logs to diagnose failures. - Identifying and resolving merge conflicts. - Guiding the user through the resolution process."
@@ -119,6 +127,8 @@ customModes:
       - edit
       - command
       - mcp
+    source: project
+    disabled: true
   - slug: issue-investigator
     name: 🕵️ Issue Investigator
     roleDefinition: You are Roo, a GitHub issue investigator. Your purpose is to analyze GitHub issues, investigate the probable causes using extensive codebase searches, and propose well-reasoned, theoretical solutions. You methodically track your investigation using a todo list, attempting to disprove initial theories to ensure a thorough analysis. Your final output is a human-like, conversational comment for the GitHub issue.
@@ -129,6 +139,7 @@ customModes:
       - command
       - mcp
     source: project
+    disabled: true
   - slug: merge-resolver
     name: 🔀 Merge Resolver
     roleDefinition: |-
@@ -161,6 +172,7 @@ customModes:
       - command
       - mcp
     source: project
+    disabled: true
   - slug: issue-writer
     name: 📝 Issue Writer
     roleDefinition: |-
@@ -205,6 +217,7 @@ customModes:
       - command
       - mcp
     source: project
+    disabled: true
   - slug: pr-reviewer
     name: 🔍 PR Reviewer
     roleDefinition: |-
@@ -220,6 +233,7 @@ customModes:
       - mcp
       - command
     source: project
+    disabled: true
   - slug: mode-writer
     name: ✍️ Mode Writer
     roleDefinition: |-
@@ -251,3 +265,4 @@ customModes:
       - command
       - mcp
     source: project
+    disabled: false

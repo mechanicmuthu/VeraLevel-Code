@@ -1002,6 +1002,98 @@ export class CustomModesManager {
 		this.cachedAt = 0
 	}
 
+	/**
+	 * Set the disabled state of a mode
+	 */
+	public async setModeDisabled(slug: string, disabled: boolean): Promise<void> {
+		try {
+			const modes = await this.getCustomModes()
+			const mode = modes.find((m) => m.slug === slug)
+
+			if (!mode) {
+				throw new Error(`Mode not found: ${slug}`)
+			}
+
+			// Determine which file to update based on source
+			let targetPath: string
+			if (mode.source === "project") {
+				const roomodesPath = await this.getWorkspaceRoomodes()
+				if (!roomodesPath) {
+					throw new Error("No .roomodes file found in workspace")
+				}
+				targetPath = roomodesPath
+			} else {
+				targetPath = await this.getCustomModesFilePath()
+			}
+
+			await this.queueWrite(async () => {
+				await this.updateModesInFile(targetPath, (modes) => {
+					return modes.map((m) => (m.slug === slug ? { ...m, disabled } : m))
+				})
+			})
+
+			await this.refreshMergedState()
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			logger.error("Failed to update mode disabled state", { slug, disabled, error: errorMessage })
+			throw error
+		}
+	}
+
+	/**
+	 * Set disabled state for multiple modes
+	 */
+	public async setMultipleModesDisabled(updates: Array<{ slug: string; disabled: boolean }>): Promise<void> {
+		try {
+			const modes = await this.getCustomModes()
+			const updatesByFile = new Map<string, Array<{ slug: string; disabled: boolean }>>()
+
+			// Group updates by source/file
+			for (const update of updates) {
+				const mode = modes.find((m) => m.slug === update.slug)
+				if (!mode) {
+					console.warn(`Mode not found: ${update.slug}`)
+					continue
+				}
+
+				let targetPath: string
+				if (mode.source === "project") {
+					const roomodesPath = await this.getWorkspaceRoomodes()
+					if (!roomodesPath) {
+						console.warn(`No .roomodes file found for project mode: ${update.slug}`)
+						continue
+					}
+					targetPath = roomodesPath
+				} else {
+					targetPath = await this.getCustomModesFilePath()
+				}
+
+				if (!updatesByFile.has(targetPath)) {
+					updatesByFile.set(targetPath, [])
+				}
+				updatesByFile.get(targetPath)!.push(update)
+			}
+
+			// Apply updates to each file
+			for (const [filePath, fileUpdates] of updatesByFile) {
+				await this.queueWrite(async () => {
+					await this.updateModesInFile(filePath, (modes) => {
+						return modes.map((m) => {
+							const update = fileUpdates.find((u) => u.slug === m.slug)
+							return update ? { ...m, disabled: update.disabled } : m
+						})
+					})
+				})
+			}
+
+			await this.refreshMergedState()
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			logger.error("Failed to update multiple modes disabled state", { updates, error: errorMessage })
+			throw error
+		}
+	}
+
 	dispose(): void {
 		for (const disposable of this.disposables) {
 			disposable.dispose()

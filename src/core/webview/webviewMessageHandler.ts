@@ -2618,5 +2618,85 @@ export const webviewMessageHandler = async (
 			}
 			break
 		}
+		case "enableDisableModesClicked": {
+			// Handle enable/disable modes button click
+			try {
+				const { ModeManager } = await import("../../services/ModeManager")
+				const modeManager = new ModeManager(provider.context, provider.customModesManager)
+				const allModes = await modeManager.getAllModesWithSource()
+
+				// Send modes with source information to webview for the dialog
+				await provider.postMessageToWebview({
+					type: "showModeEnableDisableDialog",
+					modes: allModes,
+				})
+			} catch (error) {
+				provider.log(`Error opening enable/disable modes dialog: ${error}`)
+				vscode.window.showErrorMessage("Failed to open mode management dialog")
+			}
+			break
+		}
+		case "updateModeDisabledStates": {
+			// Handle bulk mode enable/disable updates
+			if (message.updates && typeof message.updates === "object") {
+				try {
+					const { ModeManager } = await import("../../services/ModeManager")
+					const modeManager = new ModeManager(provider.context, provider.customModesManager)
+
+					// Process each mode update
+					for (const [slug, disabled] of Object.entries(message.updates)) {
+						if (typeof disabled === "boolean") {
+							await modeManager.setModeDisabled(slug, disabled)
+						}
+					}
+
+					// Update global state after all changes
+					const customModes = await provider.customModesManager.getCustomModes()
+					await updateGlobalState("customModes", customModes)
+					await provider.postStateToWebview()
+
+					// Send success response
+					await provider.postMessageToWebview({
+						type: "modeDisabledStatesUpdated",
+						success: true,
+					})
+
+					vscode.window.showInformationMessage("Mode settings updated successfully")
+				} catch (error) {
+					provider.log(`Error updating mode disabled states: ${error}`)
+
+					// Send error response
+					await provider.postMessageToWebview({
+						type: "modeDisabledStatesUpdated",
+						success: false,
+						error: error instanceof Error ? error.message : String(error),
+					})
+
+					vscode.window.showErrorMessage("Failed to update mode settings")
+				}
+			}
+			break
+		}
+		case "getModesBySource": {
+			// Handle request for modes categorized by source
+			try {
+				const { ModeManager } = await import("../../services/ModeManager")
+				const modeManager = new ModeManager(provider.context, provider.customModesManager)
+				const modesBySource = await modeManager.getModesBySource()
+
+				await provider.postMessageToWebview({
+					type: "modesBySource",
+					modesBySource,
+				})
+			} catch (error) {
+				provider.log(`Error getting modes by source: ${error}`)
+				await provider.postMessageToWebview({
+					type: "modesBySource",
+					modesBySource: { builtin: [], global: [], project: [] },
+					error: error instanceof Error ? error.message : String(error),
+				})
+			}
+			break
+		}
 	}
 }

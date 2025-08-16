@@ -211,6 +211,9 @@ export interface WebviewMessage {
 		| "deleteCommand"
 		| "createCommand"
 		| "insertTextIntoTextarea"
+		| "enableDisableModesClicked"
+		| "updateModeDisabledStates"
+		| "getModesBySource"
 	text?: string
 	editedMessageContent?: string
 	tab?: "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "account"
@@ -254,6 +257,7 @@ export interface WebviewMessage {
 	visibility?: ShareVisibility // For share visibility
 	hasContent?: boolean // For checkRulesDirectoryResult
 	checkOnly?: boolean // For deleteCustomMode check
+	updates?: Record<string, boolean> // For mode enable/disable bulk updates
 	codeIndexSettings?: {
 		// Global state settings
 		codebaseIndexEnabled: boolean
