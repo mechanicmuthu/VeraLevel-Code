@@ -15,6 +15,7 @@ import { logger } from "../../utils/logging"
 import { GlobalFileNames } from "../../shared/globalFileNames"
 import { ensureSettingsDirectoryExists } from "../../utils/globalContext"
 import { t } from "../../i18n"
+import { modes as builtInModes } from "../../shared/modes"
 
 const ROOMODES_FILENAME = ".roomodes"
 
@@ -300,6 +301,7 @@ export class CustomModesManager {
 				// Merge modes from both sources (.roomodes takes precedence)
 				const mergedModes = await this.mergeCustomModes(roomodesModes, result.data.customModes)
 				await this.context.globalState.update("customModes", mergedModes)
+				await this.context.globalState.update("enabledModes", await this.getEnabledModes())
 				this.clearCache()
 				await this.onUpdate()
 			} catch (error) {
@@ -326,6 +328,7 @@ export class CustomModesManager {
 					// .roomodes takes precedence
 					const mergedModes = await this.mergeCustomModes(roomodesModes, settingsModes)
 					await this.context.globalState.update("customModes", mergedModes)
+					await this.context.globalState.update("enabledModes", await this.getEnabledModes())
 					this.clearCache()
 					await this.onUpdate()
 				} catch (error) {
@@ -341,6 +344,7 @@ export class CustomModesManager {
 					try {
 						const settingsModes = await this.loadModesFromFile(settingsPath)
 						await this.context.globalState.update("customModes", settingsModes)
+						await this.context.globalState.update("enabledModes", await this.getEnabledModes())
 						this.clearCache()
 						await this.onUpdate()
 					} catch (error) {
@@ -401,29 +405,112 @@ export class CustomModesManager {
 	}
 
 	public async getEnabledModes(): Promise<string[]> {
-		const allModes = await this.getCustomModes()
-		const persistedEnabledModes = this.context.globalState.get<string[]>("enabledModes")
+		// Build the universe of available slugs = built-ins + custom (custom may override names but slug unique)
+		const custom = await this.getCustomModes()
+		const allModeSlugs = Array.from(
+			new Set<string>([...builtInModes.map((m) => m.slug), ...custom.map((m) => m.slug)]),
+		)
 
-		// Build set of available mode slugs for reconciliation
-		const allModeSlugs = new Set(allModes.map((mode) => mode.slug))
+		// Prefer file-backed persistence (project .roomodes overrides global file)
+		const projectEnabled = await this.getEnabledModesFromProjectFile()
+		const globalEnabled = await this.getEnabledModesFromGlobalFile()
 
-		// If nothing was ever persisted (undefined), return the full list of available modes
-		// Do NOT mutate globalState here; reads should not cause side-effects. Persisting
-		// should be the responsibility of explicit user actions (e.g. via UI).
-		if (persistedEnabledModes === undefined) {
-			return allModes.map((m) => m.slug)
+		let base: string[] | undefined = projectEnabled ?? globalEnabled
+
+		// Back-compat for older installs/tests: fall back to globalState mirror
+		if (!base) {
+			const legacy = this.context.globalState.get<string[]>("enabledModes")
+			base = legacy ?? undefined
 		}
 
-		// Otherwise, reconcile the persisted list with currently available modes and return it.
-		// IMPORTANT: include any newly-added mode slugs so that new custom modes are
-		// enabled by default. We still respect explicit user choices (if they removed
-		// modes from persistedEnabledModes they remain removed), but any mode that
-		// exists now and wasn't part of persisted list will be added to the returned
-		// array. Do not persist this reconciliation here.
-		const persistedFiltered = persistedEnabledModes.filter((slug) => allModeSlugs.has(slug))
-		const newSlugs = Array.from(allModeSlugs).filter((slug) => !persistedEnabledModes.includes(slug))
+		// Default opt-out: if nothing persisted anywhere, enable all modes
+		if (!base) {
+			return [...allModeSlugs]
+		}
 
-		return [...persistedFiltered, ...newSlugs]
+		// Reconcile: keep only existing slugs and add any newly added modes (default ON)
+		const baseSet = new Set(base)
+		const filtered = base.filter((s) => allModeSlugs.includes(s))
+		const additions = allModeSlugs.filter((s) => !baseSet.has(s))
+		return [...filtered, ...additions]
+	}
+
+	/** Return the persisted enabledModes by scope and the merged (effective) value. */
+	public async getPersistedEnabledModes(): Promise<{
+		project?: string[]
+		global?: string[]
+		merged: string[]
+	}> {
+		const project = await this.getEnabledModesFromProjectFile()
+		const global = await this.getEnabledModesFromGlobalFile()
+		const merged = await this.getEnabledModes()
+		return { project: project ?? undefined, global: global ?? undefined, merged }
+	}
+
+	/** Persist the enabledModes list to the chosen scope's file. */
+	public async persistEnabledModes(scope: "project" | "global", enabledModes: string[]): Promise<void> {
+		const availableSlugs = (await this.getCustomModes()).map((m) => m.slug)
+		const reconciled = enabledModes.filter((s) => availableSlugs.includes(s))
+		if (reconciled.length === 0 && availableSlugs.length > 0) {
+			// Ensure at least one mode stays enabled
+			reconciled.push(availableSlugs[0])
+		}
+
+		const filePath = scope === "project" ? await this.getWorkspaceRoomodes() : await this.getCustomModesFilePath()
+
+		if (scope === "project" && !filePath) {
+			throw new Error(t("common:customModes.errors.noWorkspaceForProject"))
+		}
+
+		await this.queueWrite(async () => {
+			await this.updateYamlTopLevelArray(filePath!, "enabledModes", reconciled)
+			// Update mirrors and merged state
+			await this.context.globalState.update("enabledModes", await this.getEnabledModes())
+			await this.refreshMergedState()
+		})
+	}
+
+	private async getEnabledModesFromProjectFile(): Promise<string[] | undefined> {
+		const roomodesPath = await this.getWorkspaceRoomodes()
+		if (!roomodesPath) return undefined
+		try {
+			const content = await fs.readFile(roomodesPath, "utf-8")
+			const parsed = this.parseYamlSafely(content, roomodesPath)
+			const arr = parsed?.enabledModes
+			return Array.isArray(arr) ? (arr.filter((s: any) => typeof s === "string") as string[]) : undefined
+		} catch {
+			return undefined
+		}
+	}
+
+	private async getEnabledModesFromGlobalFile(): Promise<string[] | undefined> {
+		const settingsPath = await this.getCustomModesFilePath()
+		try {
+			const content = await fs.readFile(settingsPath, "utf-8")
+			const parsed = this.parseYamlSafely(content, settingsPath)
+			const arr = parsed?.enabledModes
+			return Array.isArray(arr) ? (arr.filter((s: any) => typeof s === "string") as string[]) : undefined
+		} catch {
+			return undefined
+		}
+	}
+
+	private async updateYamlTopLevelArray(filePath: string, key: string, values: any[]): Promise<void> {
+		let content = "{}"
+		try {
+			content = await fs.readFile(filePath, "utf-8")
+		} catch {
+			content = yaml.stringify({ customModes: [] }, { lineWidth: 0 })
+		}
+		let parsed: any
+		try {
+			parsed = this.parseYamlSafely(content, filePath)
+		} catch {
+			parsed = { customModes: [] }
+		}
+		if (!parsed || typeof parsed !== "object") parsed = { customModes: [] }
+		parsed[key] = values
+		await fs.writeFile(filePath, yaml.stringify(parsed, { lineWidth: 0 }), "utf-8")
 	}
 
 	public async updateCustomMode(slug: string, config: ModeConfig): Promise<void> {
@@ -526,6 +613,7 @@ export class CustomModesManager {
 		const mergedModes = await this.mergeCustomModes(roomodesModes, settingsModes)
 
 		await this.context.globalState.update("customModes", mergedModes)
+		await this.context.globalState.update("enabledModes", await this.getEnabledModes())
 
 		this.clearCache()
 
@@ -567,6 +655,9 @@ export class CustomModesManager {
 					await this.deleteRulesFolder(slug, modeToDelete, fromMarketplace)
 				}
 
+				// Remove from enabledModes in both files if present
+				await this.stripSlugFromEnabledLists(slug, settingsPath, roomodesPath)
+
 				// Clear cache when modes are deleted
 				this.clearCache()
 				await this.refreshMergedState()
@@ -575,6 +666,23 @@ export class CustomModesManager {
 			const errorMessage = error instanceof Error ? error.message : String(error)
 			vscode.window.showErrorMessage(t("common:customModes.errors.deleteFailed", { error: errorMessage }))
 		}
+	}
+
+	private async stripSlugFromEnabledLists(slug: string, settingsPath: string, roomodesPath?: string) {
+		const strip = async (fp: string) => {
+			try {
+				const content = await fs.readFile(fp, "utf-8")
+				const parsed = this.parseYamlSafely(content, fp)
+				if (Array.isArray(parsed?.enabledModes)) {
+					const next = (parsed.enabledModes as any[]).filter((s) => s !== slug)
+					await this.updateYamlTopLevelArray(fp, "enabledModes", next)
+				}
+			} catch {
+				// ignore
+			}
+		}
+		await strip(settingsPath)
+		if (roomodesPath) await strip(roomodesPath)
 	}
 
 	/**

@@ -28,6 +28,8 @@ export interface WebviewMessage {
 		| "deleteMultipleTasksWithIds"
 		| "currentApiConfigName"
 		| "updateEnabledModes"
+		| "persistEnabledModes"
+		| "requestPersistedEnabledModes"
 		| "saveApiConfiguration"
 		| "upsertApiConfiguration"
 		| "deleteApiConfiguration"

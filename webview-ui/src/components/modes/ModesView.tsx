@@ -75,6 +75,7 @@ const ModesView = ({ onDone }: ModesViewProps) => {
 		customInstructions,
 		setCustomInstructions,
 		customModes,
+		persistedEnabledModes,
 	} = useExtensionState()
 
 	// Use a local state to track the visually active mode
@@ -94,6 +95,25 @@ const ModesView = ({ onDone }: ModesViewProps) => {
 	const [showConfigMenu, setShowConfigMenu] = useState(false)
 	const [isCreateModeDialogOpen, setIsCreateModeDialogOpen] = useState(false)
 	const [isSystemPromptDisclosureOpen, setIsSystemPromptDisclosureOpen] = useState(false)
+
+	// Persistent enabled mode UI: single toggle for the selected mode (no bulk grid)
+	const [saveScope, setSaveScope] = useState<ModeSource>("project")
+	const [isSelectedModePersistedEnabled, setIsSelectedModePersistedEnabled] = useState<boolean | undefined>(undefined)
+
+	// Sync selected mode persisted enabled state when persisted list or selected mode changes
+	useEffect(() => {
+		if (!visualMode) {
+			setIsSelectedModePersistedEnabled(undefined)
+			return
+		}
+		// If persistedEnabledModes is available, use it as the upper bound and assume default opt-out (enabled)
+		if (persistedEnabledModes && persistedEnabledModes.length > 0) {
+			setIsSelectedModePersistedEnabled(persistedEnabledModes.includes(visualMode))
+			return
+		}
+		// No persisted list -> default enabled
+		setIsSelectedModePersistedEnabled(true)
+	}, [persistedEnabledModes, visualMode])
 	const [isExporting, setIsExporting] = useState(false)
 	const [isImporting, setIsImporting] = useState(false)
 	const [showImportDialog, setShowImportDialog] = useState(false)
@@ -209,6 +229,15 @@ const ModesView = ({ onDone }: ModesViewProps) => {
 		const findMode = (m: ModeConfig): boolean => m.slug === visualMode
 		return customModes?.find(findMode) || modes.find(findMode)
 	}, [visualMode, customModes, modes])
+
+	const currentModeConfig = getCurrentMode()
+	const currentModeSourceLabel = useMemo(() => {
+		if (!currentModeConfig) return undefined
+		if (!findModeBySlug(currentModeConfig.slug, customModes)) return "Built-in"
+		return currentModeConfig.source === "project" ? "Project (.roomodes)" : "Global"
+	}, [currentModeConfig, customModes, findModeBySlug])
+
+	const isBuiltIn = useCallback((slug: string) => !findModeBySlug(slug, customModes), [customModes, findModeBySlug])
 
 	// Check if the current mode has rules to export
 	const checkRulesDirectory = useCallback((slug: string) => {
@@ -733,6 +762,13 @@ const ModesView = ({ onDone }: ModesViewProps) => {
 					</div>
 				</div>
 
+				{/* Source badge for selected mode */}
+				{currentModeSourceLabel && (
+					<div className="text-xs text-vscode-descriptionForeground mb-3">
+						Source: {currentModeSourceLabel}
+					</div>
+				)}
+
 				{/* Name section */}
 				<div className="mb-5">
 					{/* Only show name and delete for custom modes */}
@@ -982,6 +1018,81 @@ const ModesView = ({ onDone }: ModesViewProps) => {
 
 					{/* Mode settings */}
 					<>
+						{/* Persistent enabled toggle for the selected mode */}
+						<div className="mb-4">
+							<div className="flex justify-between items-center mb-1">
+								<div className="font-bold">Persistent enabled</div>
+							</div>
+							<div className="text-sm text-vscode-descriptionForeground mb-2">
+								This controls whether the selected mode is enabled persistently (saved to file).
+								Built-in modes cannot be disabled permanently. The currently active mode cannot be
+								disabled.
+							</div>
+							<div className="mb-2">
+								<VSCodeRadioGroup
+									value={saveScope}
+									onChange={(e: Event | React.FormEvent<HTMLElement>) => {
+										const target = ((e as CustomEvent)?.detail?.target ||
+											(e.target as HTMLInputElement)) as HTMLInputElement
+										setSaveScope(target.value as ModeSource)
+									}}>
+									<VSCodeRadio value="project">Project (.roomodes)</VSCodeRadio>
+									<VSCodeRadio value="global">Global</VSCodeRadio>
+								</VSCodeRadioGroup>
+							</div>
+							{visualMode ? (
+								<div className="flex items-center gap-3">
+									{/* Determine if built-in or custom */}
+									{(() => {
+										const builtIn = isBuiltIn(visualMode)
+										const isCurrent = visualMode === mode
+										const disabled = builtIn || isCurrent
+										const checked = !!isSelectedModePersistedEnabled
+										return (
+											<label className="flex items-center gap-2 text-sm">
+												<input
+													type="checkbox"
+													checked={checked}
+													disabled={disabled}
+													onChange={async () => {
+														// Toggle the persisted enabled value for the selected mode
+														const next = !checked
+														// Build the new enabledModes payload: request the host to persist either including or excluding the slug.
+														// We will request the host to persist the full list; the host will reconcile and ensure at least one remains.
+														const currentlyPersisted = persistedEnabledModes ?? []
+														let nextList: string[]
+														if (next) {
+															nextList = Array.from(
+																new Set([...currentlyPersisted, visualMode]),
+															)
+														} else {
+															nextList = (currentlyPersisted || []).filter(
+																(s) => s !== visualMode,
+															)
+														}
+														// Optimistically update UI
+														setIsSelectedModePersistedEnabled(next)
+														// Ask host to persist to selected scope
+														vscode.postMessage({
+															type: "persistEnabledModes",
+															enabledModes: nextList,
+															values: { scope: saveScope },
+														})
+													}}
+												/>
+												<span className="truncate">
+													<strong>{getCurrentMode()?.name}</strong>
+												</span>
+											</label>
+										)
+									})()}
+								</div>
+							) : (
+								<div className="text-sm text-vscode-descriptionForeground">
+									Select a mode to configure persistent enabled state.
+								</div>
+							)}
+						</div>
 						{/* Show tools for all modes */}
 						<div className="mb-4">
 							<div className="flex justify-between items-center mb-1">

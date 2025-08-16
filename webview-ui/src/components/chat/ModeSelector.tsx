@@ -43,7 +43,8 @@ export const ModeSelector = ({
 	const [searchValue, setSearchValue] = React.useState("")
 	const searchInputRef = React.useRef<HTMLInputElement>(null)
 	const portalContainer = useRooPortal("roo-portal")
-	const { hasOpenedModeSelector, setHasOpenedModeSelector, enabledModes, setEnabledModes } = useExtensionState()
+	const { hasOpenedModeSelector, setHasOpenedModeSelector, enabledModes, setEnabledModes, persistedEnabledModes } =
+		useExtensionState()
 	const { t } = useAppTranslation()
 
 	const trackModeSelectorOpened = React.useCallback(() => {
@@ -138,16 +139,21 @@ export const ModeSelector = ({
 
 	// Guard against enabledModes being undefined (tests or contexts may omit it).
 	const safeEnabledModes = React.useMemo(() => enabledModes ?? [], [enabledModes])
+	const persisted = React.useMemo(() => new Set(persistedEnabledModes ?? []), [persistedEnabledModes])
 
 	const handleToggleMode = React.useCallback(
 		(modeSlug: string) => {
+			// Temporary overrides only. Never allow enabling a mode that is not persisted-enabled.
+			if (!persisted.has(modeSlug)) return
 			const current = safeEnabledModes
 			const newEnabledModes = current.includes(modeSlug)
 				? current.filter((slug) => slug !== modeSlug)
 				: [...current, modeSlug]
+			// Prevent unchecking the last remaining enabled mode in ephemeral state
+			if (newEnabledModes.length === 0) return
 			setEnabledModes(newEnabledModes)
 		},
-		[safeEnabledModes, setEnabledModes],
+		[persisted, safeEnabledModes, setEnabledModes],
 	)
 
 	const onOpenChange = React.useCallback(
@@ -266,6 +272,7 @@ export const ModeSelector = ({
 												checked={safeEnabledModes.includes(mode.slug)}
 												onChange={() => handleToggleMode(mode.slug)}
 												className="mr-2"
+												disabled={!persisted.has(mode.slug)}
 											/>
 										</StandardTooltip>
 										<StandardTooltip

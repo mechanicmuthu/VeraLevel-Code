@@ -63,6 +63,7 @@ export interface ExtensionMessage {
 		| "state"
 		| "selectedImages"
 		| "theme"
+		| "persistedEnabledModes"
 		| "workspaceUpdated"
 		| "invoke"
 		| "messageUpdated"

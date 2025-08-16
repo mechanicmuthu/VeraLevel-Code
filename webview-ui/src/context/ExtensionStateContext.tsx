@@ -26,6 +26,7 @@ import { convertTextMateToHljs } from "@src/utils/textMateToHljs"
 export interface ExtensionStateContextType extends ExtensionState {
 	enabledModes: string[]
 	setEnabledModes: (value: string[]) => void
+	persistedEnabledModes?: string[]
 	historyPreviewCollapsed?: boolean // Add the new state property
 	didHydrateState: boolean
 	showWelcome: boolean
@@ -272,6 +273,7 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 	})
 	const [includeTaskHistoryInEnhance, setIncludeTaskHistoryInEnhance] = useState(false)
 	const [enabledModes, setEnabledModesState] = useState<string[]>([])
+	const [persistedEnabledModes, setPersistedEnabledModes] = useState<string[] | undefined>(undefined)
 
 	useEffect(() => {
 		// Initialize enabledModes from the extension-provided state if available.
@@ -297,12 +299,9 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		})
 	}, [state.customModes, didHydrateState])
 
-	// Setter that persists enabledModes to the extension host and updates local state
+	// Setter for ephemeral chat-level overrides only (do not persist to extension)
 	const setEnabledModes = useCallback((enabled: string[]) => {
 		setEnabledModesState(enabled)
-		// Persist to extension host so the backend and system prompt generator
-		// use the canonical list. The extension listens for "updateEnabledModes" messages.
-		vscode.postMessage({ type: "updateEnabledModes", enabledModes: enabled })
 	}, [])
 
 	const setListApiConfigMeta = useCallback(
@@ -324,14 +323,35 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 		(event: MessageEvent) => {
 			const message: ExtensionMessage = event.data
 			switch (message.type) {
+				case "persistedEnabledModes": {
+					const merged = (message.values as any)?.merged as string[] | undefined
+					if (merged) {
+						setPersistedEnabledModes(merged)
+						setEnabledModesState((prev) => {
+							if (!prev || prev.length === 0) return merged
+							const pset = new Set(merged)
+							return prev.filter((s) => pset.has(s))
+						})
+					}
+					break
+				}
 				case "state": {
 					const newState = message.state!
 					setState((prevState) => mergeExtensionState(prevState, newState))
 					setShowWelcome(!checkExistKey(newState.apiConfiguration))
 					setDidHydrateState(true)
-					// Initialize enabledModes from extension state if provided (don't repost)
+					// Initialize/merge enabled modes from extension (persisted). Keep ephemeral disables.
 					if ((newState as any).enabledModes !== undefined) {
-						setEnabledModesState((newState as any).enabledModes || [])
+						const persisted: string[] = ((newState as any).enabledModes || []).filter(
+							(s: any) => typeof s === "string",
+						)
+						setPersistedEnabledModes(persisted)
+						setEnabledModesState((prev) => {
+							if (!prev || prev.length === 0) return persisted
+							// intersection: cannot enable beyond persisted; keep user's ephemeral disables
+							const pset = new Set(persisted)
+							return prev.filter((s) => pset.has(s))
+						})
 					}
 					// Update alwaysAllowFollowupQuestions if present in state message
 					if ((newState as any).alwaysAllowFollowupQuestions !== undefined) {
@@ -425,12 +445,15 @@ export const ExtensionStateContextProvider: React.FC<{ children: React.ReactNode
 
 	useEffect(() => {
 		vscode.postMessage({ type: "webviewDidLaunch" })
+		// Also request persisted enabled modes from host
+		vscode.postMessage({ type: "requestPersistedEnabledModes" })
 	}, [])
 
 	const contextValue: ExtensionStateContextType = {
 		...state,
 		enabledModes,
 		setEnabledModes,
+		persistedEnabledModes,
 		didHydrateState,
 		showWelcome,
 		theme,

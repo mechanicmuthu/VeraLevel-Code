@@ -362,6 +362,42 @@ export const webviewMessageHandler = async (
 
 			break
 		}
+		case "persistEnabledModes": {
+			// Persist enabled modes to either project (/.roomodes) or global (custom-modes.yaml)
+			const scope = (message.values?.scope as "project" | "global") || "project"
+			const enabled = Array.isArray(message.enabledModes)
+				? (message.enabledModes as any[]).filter((s) => typeof s === "string")
+				: []
+
+			try {
+				await provider.customModesManager.persistEnabledModes(scope, enabled as string[])
+
+				// After persisting, refresh state and post to webview
+				const customModes = await provider.customModesManager.getCustomModes()
+				await updateGlobalState("customModes", customModes)
+				await updateGlobalState("enabledModes", await provider.customModesManager.getEnabledModes())
+				await provider.postStateToWebview()
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error)
+				console.error("Failed to persist enabled modes:", msg)
+				vscode.window.showErrorMessage(msg)
+			}
+			break
+		}
+		case "requestPersistedEnabledModes": {
+			try {
+				const { project, global, merged } = await provider.customModesManager.getPersistedEnabledModes()
+				await provider.postMessageToWebview({
+					type: "persistedEnabledModes",
+					values: { project, global, merged },
+				})
+			} catch (error) {
+				const msg = error instanceof Error ? error.message : String(error)
+				console.error("Failed to load persisted enabled modes:", msg)
+				await provider.postMessageToWebview({ type: "persistedEnabledModes", values: { error: msg } })
+			}
+			break
+		}
 		case "alwaysAllowModeSwitch":
 			await updateGlobalState("alwaysAllowModeSwitch", message.bool)
 			await provider.postStateToWebview()
