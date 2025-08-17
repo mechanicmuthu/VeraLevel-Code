@@ -2640,39 +2640,38 @@ export const webviewMessageHandler = async (
 			// Handle bulk mode enable/disable updates
 			if (message.updates && typeof message.updates === "object") {
 				try {
-					const { ModeManager } = await import("../../services/ModeManager")
-					const modeManager = new ModeManager(provider.context, provider.customModesManager)
-
-					// Process each mode update
+					// Convert updates object into array for batch processing
+					const updatesArray: Array<{ slug: string; disabled: boolean }> = []
 					for (const [slug, disabled] of Object.entries(message.updates)) {
 						if (typeof disabled === "boolean") {
-							await modeManager.setModeDisabled(slug, disabled)
+							updatesArray.push({ slug, disabled })
 						}
 					}
 
-					// Update global state after all changes
+					if (updatesArray.length > 0) {
+						// Use CustomModesManager batch API which groups updates by file and
+						// performs each file write in a single queued operation.
+						await provider.customModesManager.setMultipleModesDisabled(updatesArray)
+					}
+
+					// Refresh state and notify webview
 					const customModes = await provider.customModesManager.getCustomModes()
 					await updateGlobalState("customModes", customModes)
 					await provider.postStateToWebview()
 
-					// Send success response
-					await provider.postMessageToWebview({
-						type: "modeDisabledStatesUpdated",
-						success: true,
-					})
+					await provider.postMessageToWebview({ type: "modeDisabledStatesUpdated", success: true })
 
-					vscode.window.showInformationMessage("Mode settings updated successfully")
+					vscode.window.showInformationMessage(t("common:info.modes_updated"))
 				} catch (error) {
 					provider.log(`Error updating mode disabled states: ${error}`)
 
-					// Send error response
 					await provider.postMessageToWebview({
 						type: "modeDisabledStatesUpdated",
 						success: false,
 						error: error instanceof Error ? error.message : String(error),
 					})
 
-					vscode.window.showErrorMessage("Failed to update mode settings")
+					vscode.window.showErrorMessage(t("common:errors.update_modes_failed"))
 				}
 			}
 			break

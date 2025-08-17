@@ -307,12 +307,23 @@ const App = () => {
 				onOpenChange={(open: boolean) => setModeDialogOpen(open)}
 				modes={modeDialogModes}
 				onSave={(updatedModes: any[]) => {
-					// Build updates map slug -> disabled
+					// Only send updates for modes whose disabled state actually changed.
 					const updates: Record<string, boolean> = {}
-					for (const m of updatedModes) {
-						updates[m.slug] = !!m.disabled
+					const previousModesBySlug: Record<string, any> = {}
+					for (const m of modeDialogModes) {
+						previousModesBySlug[m.slug] = m
 					}
-					vscode.postMessage({ type: "updateModeDisabledStates", updates })
+					for (const m of updatedModes) {
+						const prev = previousModesBySlug[m.slug]
+						const prevDisabled = !!(prev && prev.disabled)
+						const newDisabled = !!m.disabled
+						if (prevDisabled !== newDisabled) {
+							updates[m.slug] = newDisabled
+						}
+					}
+					if (Object.keys(updates).length > 0) {
+						vscode.postMessage({ type: "updateModeDisabledStates", updates })
+					}
 					// Optimistically update local dialog modes
 					setModeDialogModes(updatedModes)
 				}}

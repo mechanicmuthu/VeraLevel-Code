@@ -12,9 +12,18 @@ import {
 	Badge,
 	Separator,
 	StandardTooltip,
+	AlertDialog,
+	AlertDialogContent,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogCancel,
+	AlertDialogAction,
 } from "@src/components/ui"
 import { cn } from "@/lib/utils"
 import type { ModeConfig } from "@roo-code/types"
+import { useAppTranslation } from "@src/i18n/TranslationContext"
 
 const SOURCE_INFO = {
 	builtin: {
@@ -49,6 +58,11 @@ interface ModeEnableDisableDialogProps {
 	onOpenChange: (open: boolean) => void
 	modes: ModeWithSource[]
 	onSave: (updatedModes: ModeWithSource[]) => void
+}
+
+interface DeleteState {
+	open: boolean
+	tMode?: { slug: string; name: string; source?: string; rulesFolderPath?: string } | null
 }
 
 interface GroupedModes {
@@ -86,6 +100,10 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 }) => {
 	const [localModes, setLocalModes] = useState<ModeWithSource[]>(modes)
 	const [hasChanges, setHasChanges] = useState(false)
+
+	const { t } = useAppTranslation()
+
+	const [deleteState, setDeleteState] = useState<DeleteState>({ open: false, tMode: null })
 
 	// Update local state when props change
 	useEffect(() => {
@@ -184,9 +202,54 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 			</div>
 			<div className="status-indicator flex items-center gap-1 flex-shrink-0">
 				{mode.disabled ? <EyeOff className="size-4 disabled" /> : <Eye className="size-4 enabled" />}
+				{/* Show delete for global custom modes (they override built-in or are user-created) */}
+				{mode.source === "global" && (
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={() => {
+							// Ask the extension to check for rules folder and return path via message
+							setDeleteState({
+								open: false,
+								tMode: { slug: mode.slug, name: mode.name, source: mode.source },
+							})
+							// Request checkOnly first
+							window.parent.postMessage(
+								{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
+								"*",
+							)
+						}}>
+						<span className="codicon codicon-trash"></span>
+					</Button>
+				)}
 			</div>
 		</div>
 	)
+
+	// Listen for delete check responses from extension
+	useEffect(() => {
+		const handler = (e: MessageEvent) => {
+			const message = e.data
+			if (message.type === "deleteCustomModeCheck") {
+				if (message.slug && deleteState.tMode && deleteState.tMode.slug === message.slug) {
+					setDeleteState({
+						open: true,
+						tMode: { ...deleteState.tMode, rulesFolderPath: message.rulesFolderPath },
+					})
+				}
+			}
+		}
+		window.addEventListener("message", handler)
+		return () => window.removeEventListener("message", handler)
+	}, [deleteState.tMode])
+
+	const confirmDelete = () => {
+		if (!deleteState.tMode) return
+		window.parent.postMessage({ type: "deleteCustomMode", slug: deleteState.tMode.slug }, "*")
+		setDeleteState({ open: false, tMode: null })
+		// Close dialog after request; backend will refresh state
+		onOpenChange(false)
+	}
 
 	// Source group component
 	const SourceGroup: React.FC<{ source: ModeSource; modes: ModeWithSource[] }> = ({ source, modes }) => {
@@ -317,6 +380,39 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 						</Button>
 					</div>
 				</DialogFooter>
+
+				{/* Delete confirmation dialog for global custom modes */}
+				<AlertDialog open={!!deleteState.open} onOpenChange={(open) => setDeleteState((s) => ({ ...s, open }))}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>{t ? t("prompts:deleteMode.title") : "Delete mode"}</AlertDialogTitle>
+							<AlertDialogDescription>
+								{deleteState.tMode && (
+									<>
+										{t
+											? t("prompts:deleteMode.message", { modeName: deleteState.tMode.name })
+											: `Delete ${deleteState.tMode.name}?`}
+										{deleteState.tMode.rulesFolderPath && (
+											<div className="mt-2">
+												{t
+													? t("prompts:deleteMode.rulesFolder", {
+															folderPath: deleteState.tMode.rulesFolderPath,
+														})
+													: deleteState.tMode.rulesFolderPath}
+											</div>
+										)}
+									</>
+								)}
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>{t ? t("prompts:deleteMode.cancel") : "Cancel"}</AlertDialogCancel>
+							<AlertDialogAction onClick={confirmDelete}>
+								{t ? t("prompts:deleteMode.confirm") : "Delete"}
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 			</DialogContent>
 		</Dialog>
 	)
