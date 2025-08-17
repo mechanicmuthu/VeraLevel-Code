@@ -5,6 +5,7 @@ import { RooCodeEventName } from "@roo-code/types"
 import { ToolUse, AskApproval, HandleError, PushToolResult, RemoveClosingTag } from "../../shared/tools"
 import { Task } from "../task/Task"
 import { defaultModeSlug, getModeBySlug } from "../../shared/modes"
+import { ModeManager } from "../../services/ModeManager"
 import { formatResponse } from "../prompts/responses"
 import { t } from "../../i18n"
 
@@ -57,6 +58,28 @@ export async function newTaskTool(
 				return
 			}
 
+			// Validate mode availability (not disabled)
+			const provider = cline.providerRef.deref()
+
+			if (!provider || !provider.context || !provider.customModesManager) {
+				pushToolResult(formatResponse.toolError("Unable to access mode configuration."))
+				return
+			}
+
+			const modeManager = new ModeManager(provider.context, provider.customModesManager)
+			const validationResult = await modeManager.validateModeSwitch(mode)
+
+			if (!validationResult.isValid) {
+				cline.recordToolError("new_task")
+				// Provide helpful error message with available modes
+				const enabledModes = await modeManager.getEnabledModes()
+				const availableModesList = enabledModes.map((m) => `- ${m.slug}: ${m.name}`).join("\n")
+
+				const errorMessage = `${validationResult.errorMessage}\n\nAvailable enabled modes:\n${availableModesList}`
+				pushToolResult(formatResponse.toolError(errorMessage))
+				return
+			}
+
 			const toolMessage = JSON.stringify({
 				tool: "newTask",
 				mode: targetMode.name,
@@ -69,9 +92,10 @@ export async function newTaskTool(
 				return
 			}
 
-			const provider = cline.providerRef.deref()
+			// provider used for creating task
+			const providerForCreation = cline.providerRef.deref()
 
-			if (!provider) {
+			if (!providerForCreation) {
 				return
 			}
 
@@ -80,10 +104,10 @@ export async function newTaskTool(
 			}
 
 			// Preserve the current mode so we can resume with it later.
-			cline.pausedModeSlug = (await provider.getState()).mode ?? defaultModeSlug
+			cline.pausedModeSlug = (await providerForCreation.getState()).mode ?? defaultModeSlug
 
 			// Create new task instance first (this preserves parent's current mode in its history)
-			const newCline = await provider.createTask(unescapedMessage, undefined, cline)
+			const newCline = await providerForCreation.createTask(unescapedMessage, undefined, cline)
 
 			if (!newCline) {
 				pushToolResult(t("tools:newTask.errors.policy_restriction"))
@@ -91,7 +115,7 @@ export async function newTaskTool(
 			}
 
 			// Now switch the newly created task to the desired mode
-			await provider.handleModeSwitch(mode)
+			await providerForCreation.handleModeSwitch(mode)
 
 			// Delay to allow mode change to take effect
 			await delay(500)
