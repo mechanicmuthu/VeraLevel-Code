@@ -62,6 +62,8 @@ interface ModeEnableDisableDialogProps {
 
 interface DeleteState {
 	open: boolean
+	// action: 'delete' | 'restore' - determines dialog wording
+	action?: "delete" | "restore"
 	tMode?: { slug: string; name: string; source?: string; rulesFolderPath?: string } | null
 }
 
@@ -204,23 +206,47 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 				{mode.disabled ? <EyeOff className="size-4 disabled" /> : <Eye className="size-4 enabled" />}
 				{/* Show delete for global custom modes (they override built-in or are user-created) */}
 				{mode.source === "global" && (
-					<Button
-						variant="ghost"
-						size="icon"
-						onClick={() => {
-							// Ask the extension to check for rules folder and return path via message
-							setDeleteState({
-								open: false,
-								tMode: { slug: mode.slug, name: mode.name, source: mode.source },
-							})
-							// Request checkOnly first
-							window.parent.postMessage(
-								{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
-								"*",
-							)
-						}}>
-						<span className="codicon codicon-trash"></span>
-					</Button>
+					<div className="flex items-center gap-1">
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={() => {
+								// Ask the extension to check for rules folder and return path via message
+								setDeleteState({
+									open: false,
+									action: "delete",
+									tMode: { slug: mode.slug, name: mode.name, source: mode.source },
+								})
+								// Request checkOnly first
+								window.parent.postMessage(
+									{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
+									"*",
+								)
+							}}>
+							<span className="codicon codicon-trash"></span>
+						</Button>
+
+						{(mode as any).overridesBuiltin && (
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={() => {
+									// Ask the extension to check for rules folder and return path via message
+									setDeleteState({
+										open: false,
+										action: "restore",
+										tMode: { slug: mode.slug, name: mode.name, source: mode.source },
+									})
+									// Request checkOnly first - reuse deleteCustomMode flow but interpret as restore in dialog
+									window.parent.postMessage(
+										{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
+										"*",
+									)
+								}}>
+								<span className="codicon codicon-restore"></span>
+							</Button>
+						)}
+					</div>
 				)}
 			</div>
 		</div>
@@ -232,10 +258,12 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 			const message = e.data
 			if (message.type === "deleteCustomModeCheck") {
 				if (message.slug && deleteState.tMode && deleteState.tMode.slug === message.slug) {
-					setDeleteState({
+					// Preserve action (delete vs restore) when opening the confirmation dialog
+					setDeleteState((prev) => ({
+						...prev,
 						open: true,
-						tMode: { ...deleteState.tMode, rulesFolderPath: message.rulesFolderPath },
-					})
+						tMode: { ...prev.tMode!, rulesFolderPath: message.rulesFolderPath },
+					}))
 				}
 			}
 		}
@@ -385,13 +413,25 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 				<AlertDialog open={!!deleteState.open} onOpenChange={(open) => setDeleteState((s) => ({ ...s, open }))}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
-							<AlertDialogTitle>{t ? t("prompts:deleteMode.title") : "Delete mode"}</AlertDialogTitle>
+							<AlertDialogTitle>
+								{deleteState.action === "restore"
+									? t
+										? t("prompts:restoreMode.title")
+										: "Restore built-in mode"
+									: t
+										? t("prompts:deleteMode.title")
+										: "Delete mode"}
+							</AlertDialogTitle>
 							<AlertDialogDescription>
 								{deleteState.tMode && (
 									<>
-										{t
-											? t("prompts:deleteMode.message", { modeName: deleteState.tMode.name })
-											: `Delete ${deleteState.tMode.name}?`}
+										{deleteState.action === "restore"
+											? t
+												? t("prompts:restoreMode.message", { modeName: deleteState.tMode.name })
+												: `Restore built-in mode ${deleteState.tMode.name}?`
+											: t
+												? t("prompts:deleteMode.message", { modeName: deleteState.tMode.name })
+												: `Delete ${deleteState.tMode.name}?`}
 										{deleteState.tMode.rulesFolderPath && (
 											<div className="mt-2">
 												{t
@@ -408,7 +448,13 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 						<AlertDialogFooter>
 							<AlertDialogCancel>{t ? t("prompts:deleteMode.cancel") : "Cancel"}</AlertDialogCancel>
 							<AlertDialogAction onClick={confirmDelete}>
-								{t ? t("prompts:deleteMode.confirm") : "Delete"}
+								{deleteState.action === "restore"
+									? t
+										? t("prompts:restoreMode.confirm")
+										: "Restore"
+									: t
+										? t("prompts:deleteMode.confirm")
+										: "Delete"}
 							</AlertDialogAction>
 						</AlertDialogFooter>
 					</AlertDialogContent>

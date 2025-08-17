@@ -11,6 +11,11 @@ export interface ModeState {
 	isDisabled: boolean
 }
 
+// Internal type used when returning modes to callers (webview/handlers).
+// Extends the canonical ModeConfig with source information and an optional
+// UI-only `overridesBuiltin` flag used by the webview.
+export type ModeWithSource = ModeConfig & { source: ModeSource; overridesBuiltin?: boolean }
+
 /**
  * ModeManager handles mode operations including enable/disable functionality,
  * source identification, and mode filtering
@@ -27,9 +32,9 @@ export class ModeManager {
 	/**
 	 * Get all modes with their sources (builtin, global, project)
 	 */
-	async getAllModesWithSource(): Promise<ModeConfig[]> {
+	async getAllModesWithSource(): Promise<ModeWithSource[]> {
 		const customModes = await this.customModesManager.getCustomModes()
-		const allModes: ModeConfig[] = []
+		const allModes: ModeWithSource[] = []
 
 		// Add built-in modes first
 		for (const mode of builtinModes) {
@@ -42,9 +47,13 @@ export class ModeManager {
 
 		// Add custom modes (they override built-in modes and have source information)
 		for (const mode of customModes) {
+			// UI-only flag: indicate when a global custom mode overrides a built-in one.
+			// The webview uses this to show a "Restore built-in" action.
+			const overridesBuiltin = !!builtinModes.find((b) => b.slug === mode.slug)
 			allModes.push({
 				...mode,
-				source: mode.source || "global",
+				source: (mode.source as ModeSource) || "global",
+				overridesBuiltin,
 			})
 		}
 
@@ -54,7 +63,7 @@ export class ModeManager {
 	/**
 	 * Get all enabled modes (excluding disabled ones)
 	 */
-	async getEnabledModes(): Promise<ModeConfig[]> {
+	async getEnabledModes(): Promise<ModeWithSource[]> {
 		const allModes = await this.getAllModesWithSource()
 		return allModes.filter((mode) => !mode.disabled)
 	}
@@ -62,7 +71,7 @@ export class ModeManager {
 	/**
 	 * Get all disabled modes
 	 */
-	async getDisabledModes(): Promise<ModeConfig[]> {
+	async getDisabledModes(): Promise<ModeWithSource[]> {
 		const allModes = await this.getAllModesWithSource()
 		return allModes.filter((mode) => mode.disabled === true)
 	}
@@ -109,7 +118,7 @@ export class ModeManager {
 	/**
 	 * Get mode by slug with source information
 	 */
-	async getModeBySlug(slug: string): Promise<ModeConfig | null> {
+	async getModeBySlug(slug: string): Promise<ModeWithSource | null> {
 		const allModes = await this.getAllModesWithSource()
 		return allModes.find((m) => m.slug === slug) || null
 	}
@@ -140,9 +149,9 @@ export class ModeManager {
 	 * Get modes categorized by source
 	 */
 	async getModesBySource(): Promise<{
-		builtin: ModeConfig[]
-		global: ModeConfig[]
-		project: ModeConfig[]
+		builtin: ModeWithSource[]
+		global: ModeWithSource[]
+		project: ModeWithSource[]
 	}> {
 		const allModes = await this.getAllModesWithSource()
 
