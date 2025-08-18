@@ -12,14 +12,6 @@ import {
 	Badge,
 	Separator,
 	StandardTooltip,
-	AlertDialog,
-	AlertDialogContent,
-	AlertDialogHeader,
-	AlertDialogTitle,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogCancel,
-	AlertDialogAction,
 } from "@src/components/ui"
 import { cn } from "@/lib/utils"
 import type { ModeConfig } from "@roo-code/types"
@@ -60,13 +52,6 @@ interface ModeEnableDisableDialogProps {
 	onSave: (updatedModes: ModeWithSource[]) => void
 }
 
-interface DeleteState {
-	open: boolean
-	// action: 'delete' | 'restore' - determines dialog wording
-	action?: "delete" | "restore"
-	tMode?: { slug: string; name: string; source?: string; rulesFolderPath?: string } | null
-}
-
 interface GroupedModes {
 	builtin: ModeWithSource[]
 	global: ModeWithSource[]
@@ -102,10 +87,17 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 }) => {
 	const [localModes, setLocalModes] = useState<ModeWithSource[]>(modes)
 	const [hasChanges, setHasChanges] = useState(false)
+	const [confirmOpen, setConfirmOpen] = useState(false)
+	const [pendingAction, setPendingAction] = useState<
+		| { type: "mode"; payload: string }
+		| { type: "source"; payload: { source: ModeSource; enable: boolean } }
+		| { type: "all"; payload: { enable: boolean } }
+		| null
+	>(null)
 
-	const { t } = useAppTranslation()
+	useAppTranslation()
 
-	const [deleteState, setDeleteState] = useState<DeleteState>({ open: false, tMode: null })
+	// Delete handled in the mode settings window; no delete UI in this dialog.
 
 	// Update local state when props change
 	useEffect(() => {
@@ -134,7 +126,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 	}, [localModes])
 
 	// Toggle a single mode's disabled state
-	const toggleMode = (slug: string) => {
+	const doToggleModeImmediate = (slug: string) => {
 		setLocalModes((prev) => {
 			const updated = prev.map((mode) => (mode.slug === slug ? { ...mode, disabled: !mode.disabled } : mode))
 			return updated
@@ -142,8 +134,20 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 		setHasChanges(true)
 	}
 
-	// Toggle all modes in a source group
-	const toggleSourceGroup = (source: ModeSource, enable: boolean) => {
+	const attemptToggleMode = (slug: string) => {
+		const mode = localModes.find((m) => m.slug === slug)
+		if (!mode) return
+		// If disabling a builtin that is currently enabled, show confirmation
+		if (mode.source === "builtin" && !mode.disabled) {
+			setPendingAction({ type: "mode", payload: slug })
+			setConfirmOpen(true)
+			return
+		}
+		doToggleModeImmediate(slug)
+	}
+
+	// Toggle all modes in a source group (with confirmation for builtin disables)
+	const doToggleSourceGroupImmediate = (source: ModeSource, enable: boolean) => {
 		setLocalModes((prev) => {
 			const updated = prev.map((mode) => (mode.source === source ? { ...mode, disabled: !enable } : mode))
 			return updated
@@ -151,13 +155,38 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 		setHasChanges(true)
 	}
 
-	// Enable/disable all modes
-	const toggleAllModes = (enable: boolean) => {
+	const attemptToggleSourceGroup = (source: ModeSource, enable: boolean) => {
+		if (source === "builtin" && enable === false) {
+			// find builtin slugs that would be disabled
+			const toDisable = localModes.filter((m) => m.source === "builtin" && !m.disabled).map((m) => m.slug)
+			if (toDisable.length > 0) {
+				setPendingAction({ type: "source", payload: { source, enable } })
+				setConfirmOpen(true)
+				return
+			}
+		}
+		doToggleSourceGroupImmediate(source, enable)
+	}
+
+	// Enable/disable all modes (with confirmation for builtin disables)
+	const doToggleAllModesImmediate = (enable: boolean) => {
 		setLocalModes((prev) => {
 			const updated = prev.map((mode) => ({ ...mode, disabled: !enable }))
 			return updated
 		})
 		setHasChanges(true)
+	}
+
+	const attemptToggleAllModes = (enable: boolean) => {
+		if (enable === false) {
+			const toDisable = localModes.filter((m) => m.source === "builtin" && !m.disabled).map((m) => m.slug)
+			if (toDisable.length > 0) {
+				setPendingAction({ type: "all", payload: { enable } })
+				setConfirmOpen(true)
+				return
+			}
+		}
+		doToggleAllModesImmediate(enable)
 	}
 
 	// Handle save
@@ -184,7 +213,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 			<div className="flex items-center gap-3 flex-1 min-w-0">
 				<Checkbox
 					checked={!mode.disabled}
-					onCheckedChange={() => toggleMode(mode.slug)}
+					onCheckedChange={() => attemptToggleMode(mode.slug)}
 					className="flex-shrink-0"
 				/>
 				<div className="flex-1 min-w-0">
@@ -212,12 +241,6 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 							size="icon"
 							onClick={() => {
 								// Ask the extension to check for rules folder and return path via message
-								setDeleteState({
-									open: false,
-									action: "delete",
-									tMode: { slug: mode.slug, name: mode.name, source: mode.source },
-								})
-								// Request checkOnly first
 								window.parent.postMessage(
 									{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
 									"*",
@@ -232,12 +255,6 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 								size="icon"
 								onClick={() => {
 									// Ask the extension to check for rules folder and return path via message
-									setDeleteState({
-										open: false,
-										action: "restore",
-										tMode: { slug: mode.slug, name: mode.name, source: mode.source },
-									})
-									// Request checkOnly first - reuse deleteCustomMode flow but interpret as restore in dialog
 									window.parent.postMessage(
 										{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
 										"*",
@@ -252,32 +269,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 		</div>
 	)
 
-	// Listen for delete check responses from extension
-	useEffect(() => {
-		const handler = (e: MessageEvent) => {
-			const message = e.data
-			if (message.type === "deleteCustomModeCheck") {
-				if (message.slug && deleteState.tMode && deleteState.tMode.slug === message.slug) {
-					// Preserve action (delete vs restore) when opening the confirmation dialog
-					setDeleteState((prev) => ({
-						...prev,
-						open: true,
-						tMode: { ...prev.tMode!, rulesFolderPath: message.rulesFolderPath },
-					}))
-				}
-			}
-		}
-		window.addEventListener("message", handler)
-		return () => window.removeEventListener("message", handler)
-	}, [deleteState.tMode])
-
-	const confirmDelete = () => {
-		if (!deleteState.tMode) return
-		window.parent.postMessage({ type: "deleteCustomMode", slug: deleteState.tMode.slug }, "*")
-		setDeleteState({ open: false, tMode: null })
-		// Close dialog after request; backend will refresh state
-		onOpenChange(false)
-	}
+	// No delete handlers here — deletion lives in the dedicated mode settings UI.
 
 	// Source group component
 	const SourceGroup: React.FC<{ source: ModeSource; modes: ModeWithSource[] }> = ({ source, modes }) => {
@@ -307,7 +299,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 						<Button
 							variant="outline"
 							size="sm"
-							onClick={() => toggleSourceGroup(source, true)}
+							onClick={() => attemptToggleSourceGroup(source, true)}
 							disabled={allEnabled}
 							className="enable-disable-button text-xs h-7 px-2">
 							Enable All
@@ -315,7 +307,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 						<Button
 							variant="outline"
 							size="sm"
-							onClick={() => toggleSourceGroup(source, false)}
+							onClick={() => attemptToggleSourceGroup(source, false)}
 							disabled={noneEnabled}
 							className="enable-disable-button text-xs h-7 px-2">
 							Disable All
@@ -362,7 +354,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 						<Button
 							variant="outline"
 							size="sm"
-							onClick={() => toggleAllModes(true)}
+							onClick={() => attemptToggleAllModes(true)}
 							disabled={stats.enabled === stats.total}
 							className="enable-disable-button text-xs">
 							<Check className="size-3 mr-1" />
@@ -371,7 +363,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 						<Button
 							variant="outline"
 							size="sm"
-							onClick={() => toggleAllModes(false)}
+							onClick={() => attemptToggleAllModes(false)}
 							disabled={stats.disabled === stats.total}
 							className="enable-disable-button text-xs">
 							<X className="size-3 mr-1" />
@@ -397,6 +389,51 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 					)}
 				</div>
 
+				{/* Confirmation dialog shown when disabling built-in modes */}
+				{confirmOpen && (
+					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+						<div className="bg-white p-6 rounded-lg max-w-lg w-full">
+							<h3 className="text-lg font-semibold">Disabling built-in mode(s)</h3>
+							<p className="text-sm text-gray-700 mt-2">
+								Disabling a built-in mode will copy it to your custom_model.yaml so you can modify or
+								delete the custom copy. You can restore the original built-in mode later by deleting the
+								custom mode in Mode Settings.
+							</p>
+							<div className="mt-4 flex justify-end gap-2">
+								<Button
+									variant="outline"
+									onClick={() => {
+										// Cancel confirmation
+										setConfirmOpen(false)
+										setPendingAction(null)
+									}}>
+									Cancel
+								</Button>
+								<Button
+									onClick={() => {
+										// Proceed with pending action
+										if (pendingAction) {
+											if (pendingAction.type === "mode") {
+												doToggleModeImmediate(pendingAction.payload)
+											} else if (pendingAction.type === "source") {
+												doToggleSourceGroupImmediate(
+													pendingAction.payload.source,
+													pendingAction.payload.enable,
+												)
+											} else if (pendingAction.type === "all") {
+												doToggleAllModesImmediate(pendingAction.payload.enable)
+											}
+										}
+										setConfirmOpen(false)
+										setPendingAction(null)
+									}}>
+									Proceed
+								</Button>
+							</div>
+						</div>
+					</div>
+				)}
+
 				<DialogFooter className="flex items-center justify-between">
 					<div className="text-xs text-gray-500">{hasChanges && "You have unsaved changes"}</div>
 					<div className="flex items-center gap-2">
@@ -409,56 +446,7 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 					</div>
 				</DialogFooter>
 
-				{/* Delete confirmation dialog for global custom modes */}
-				<AlertDialog open={!!deleteState.open} onOpenChange={(open) => setDeleteState((s) => ({ ...s, open }))}>
-					<AlertDialogContent>
-						<AlertDialogHeader>
-							<AlertDialogTitle>
-								{deleteState.action === "restore"
-									? t
-										? t("prompts:restoreMode.title")
-										: "Restore built-in mode"
-									: t
-										? t("prompts:deleteMode.title")
-										: "Delete mode"}
-							</AlertDialogTitle>
-							<AlertDialogDescription>
-								{deleteState.tMode && (
-									<>
-										{deleteState.action === "restore"
-											? t
-												? t("prompts:restoreMode.message", { modeName: deleteState.tMode.name })
-												: `Restore built-in mode ${deleteState.tMode.name}?`
-											: t
-												? t("prompts:deleteMode.message", { modeName: deleteState.tMode.name })
-												: `Delete ${deleteState.tMode.name}?`}
-										{deleteState.tMode.rulesFolderPath && (
-											<div className="mt-2">
-												{t
-													? t("prompts:deleteMode.rulesFolder", {
-															folderPath: deleteState.tMode.rulesFolderPath,
-														})
-													: deleteState.tMode.rulesFolderPath}
-											</div>
-										)}
-									</>
-								)}
-							</AlertDialogDescription>
-						</AlertDialogHeader>
-						<AlertDialogFooter>
-							<AlertDialogCancel>{t ? t("prompts:deleteMode.cancel") : "Cancel"}</AlertDialogCancel>
-							<AlertDialogAction onClick={confirmDelete}>
-								{deleteState.action === "restore"
-									? t
-										? t("prompts:restoreMode.confirm")
-										: "Restore"
-									: t
-										? t("prompts:deleteMode.confirm")
-										: "Delete"}
-							</AlertDialogAction>
-						</AlertDialogFooter>
-					</AlertDialogContent>
-				</AlertDialog>
+				{/* Delete handled in settings; confirmation dialog removed from this popup */}
 			</DialogContent>
 		</Dialog>
 	)
