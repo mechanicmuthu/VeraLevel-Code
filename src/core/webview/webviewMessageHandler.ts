@@ -2660,8 +2660,6 @@ export const webviewMessageHandler = async (
 					await provider.postStateToWebview()
 
 					await provider.postMessageToWebview({ type: "modeDisabledStatesUpdated", success: true })
-
-					vscode.window.showInformationMessage(t("common:info.modes_updated"))
 				} catch (error) {
 					provider.log(`Error updating mode disabled states: ${error}`)
 

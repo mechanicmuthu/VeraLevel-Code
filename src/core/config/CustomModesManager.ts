@@ -488,6 +488,8 @@ export class CustomModesManager {
 		}
 
 		settings.customModes = operation(settings.customModes)
+		// Log write operations so extension host logs show when custom modes are persisted.
+		console.info(`[CustomModesManager] Writing custom modes to: ${filePath}`)
 		await fs.writeFile(filePath, yaml.stringify(settings, { lineWidth: 0 }), "utf-8")
 	}
 
@@ -1047,12 +1049,32 @@ export class CustomModesManager {
 		try {
 			const modes = await this.getCustomModes()
 			const updatesByFile = new Map<string, Array<{ slug: string; disabled: boolean }>>()
+			// Collect built-in modes that need to be copied into the global custom modes file
+			const addsForSettings: ModeConfig[] = []
 
 			// Group updates by source/file
 			for (const update of updates) {
 				const mode = modes.find((m) => m.slug === update.slug)
 				if (!mode) {
-					console.warn(`Mode not found: ${update.slug}`)
+					// If mode isn't present in custom modes, it might be a built-in mode.
+					// Try loading built-in definitions and create a custom copy in the global file.
+					try {
+						const { modes: builtInModes } = await import("../../shared/modes")
+						const builtIn = builtInModes.find((b: any) => b.slug === update.slug)
+						if (builtIn) {
+							// Create a global-scoped custom mode based on the built-in definition
+							const modeToAdd: ModeConfig = {
+								...builtIn,
+								disabled: update.disabled,
+								source: "global",
+							}
+							addsForSettings.push(modeToAdd)
+							continue
+						}
+						console.warn(`Mode not found: ${update.slug}`)
+					} catch (e) {
+						console.warn(`Mode not found and failed to load built-ins: ${update.slug}`)
+					}
 					continue
 				}
 
@@ -1082,6 +1104,18 @@ export class CustomModesManager {
 							const update = fileUpdates.find((u) => u.slug === m.slug)
 							return update ? { ...m, disabled: update.disabled } : m
 						})
+					})
+				})
+			}
+
+			// If we found built-in modes that need to be copied to settings, add them now
+			if (addsForSettings.length > 0) {
+				const settingsPath = await this.getCustomModesFilePath()
+				await this.queueWrite(async () => {
+					await this.updateModesInFile(settingsPath, (modes) => {
+						// Remove any existing entries with the same slugs, then append new ones
+						const filtered = modes.filter((m) => !addsForSettings.some((a) => a.slug === m.slug))
+						return [...filtered, ...addsForSettings]
 					})
 				})
 			}

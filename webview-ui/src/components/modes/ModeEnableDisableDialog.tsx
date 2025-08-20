@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react"
-import { Check, X, Eye, EyeOff, HelpCircle } from "lucide-react"
+import { Eye, EyeOff, HelpCircle } from "lucide-react"
 import {
 	Dialog,
 	DialogContent,
@@ -234,18 +234,19 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 			<div className="status-indicator flex items-center gap-1 flex-shrink-0">
 				{mode.disabled ? <EyeOff className="size-4 disabled" /> : <Eye className="size-4 enabled" />}
 				{/* Show delete for global custom modes (they override built-in or are user-created) */}
-				{mode.source === "global" && (
+				{(mode.source === "global" || mode.source === "project") && (
 					<div className="flex items-center gap-1">
 						<Button
 							variant="ghost"
 							size="icon"
 							onClick={() => {
-								// Ask the extension to check for rules folder and return path via message
-								window.parent.postMessage(
-									{ type: "deleteCustomMode", slug: mode.slug, checkOnly: true },
+								// Request the App to switch to Modes and forward the delete request
+								window.postMessage(
+									{ type: "openDeleteModeInSettingsRequest", slug: mode.slug, name: mode.name },
 									"*",
 								)
-							}}>
+							}}
+							className="text-vscode-foreground">
 							<span className="codicon codicon-trash"></span>
 						</Button>
 
@@ -279,8 +280,6 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 		const allEnabled = enabled === total
 		const noneEnabled = enabled === 0
 
-		if (modes.length === 0) return null
-
 		return (
 			<div className="space-y-3">
 				<div className="flex items-center justify-between">
@@ -301,24 +300,30 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 							size="sm"
 							onClick={() => attemptToggleSourceGroup(source, true)}
 							disabled={allEnabled}
-							className="enable-disable-button text-xs h-7 px-2">
+							className="text-xs h-7 px-2 text-vscode-foreground">
 							Enable All
 						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => attemptToggleSourceGroup(source, false)}
-							disabled={noneEnabled}
-							className="enable-disable-button text-xs h-7 px-2">
-							Disable All
-						</Button>
+						{source !== "builtin" && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => attemptToggleSourceGroup(source, false)}
+								disabled={noneEnabled}
+								className="text-xs h-7 px-2 text-vscode-foreground">
+								Disable All
+							</Button>
+						)}
 					</div>
 				</div>
-				<div className="space-y-2">
-					{modes.map((mode) => (
-						<ModeItem key={mode.slug} mode={mode} />
-					))}
-				</div>
+				{modes.length === 0 ? (
+					<div className="py-4 text-sm text-vscode-descriptionForeground">Nothing to see here.</div>
+				) : (
+					<div className="space-y-2">
+						{modes.map((mode) => (
+							<ModeItem key={mode.slug} mode={mode} />
+						))}
+					</div>
+				)}
 			</div>
 		)
 	}
@@ -338,15 +343,15 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 				</DialogHeader>
 
 				{/* Statistics and bulk actions */}
-				<div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
+				<div className="flex items-center justify-between py-3 px-4 bg-vscode-editor-background border border-vscode-input-border rounded-lg">
 					<div className="flex items-center gap-4 text-sm">
-						<span className="text-gray-700">
+						<span className="text-vscode-foreground">
 							<strong>{stats.total}</strong> total modes
 						</span>
-						<span className="text-green-700">
+						<span className="text-vscode-descriptionForeground">
 							<strong>{stats.enabled}</strong> enabled
 						</span>
-						<span className="text-red-700">
+						<span className="text-vscode-descriptionForeground">
 							<strong>{stats.disabled}</strong> disabled
 						</span>
 					</div>
@@ -356,19 +361,10 @@ export const ModeEnableDisableDialog: React.FC<ModeEnableDisableDialogProps> = (
 							size="sm"
 							onClick={() => attemptToggleAllModes(true)}
 							disabled={stats.enabled === stats.total}
-							className="enable-disable-button text-xs">
-							<Check className="size-3 mr-1" />
+							className="text-xs h-7 px-2">
 							Enable All
 						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => attemptToggleAllModes(false)}
-							disabled={stats.disabled === stats.total}
-							className="enable-disable-button text-xs">
-							<X className="size-3 mr-1" />
-							Disable All
-						</Button>
+						{/* Per design, omit a global "Disable All" here */}
 					</div>
 				</div>
 

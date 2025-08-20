@@ -165,6 +165,22 @@ const App = () => {
 				setModeDialogOpen(true)
 			}
 
+			// Internal request from child components to open the delete flow in Modes settings
+			if ((message as any).type === "openDeleteModeInSettingsRequest" && (message as any).slug) {
+				// Switch to modes tab so ModesView is mounted and can receive the forwarded message
+				switchTab("modes")
+				// Forward the request to ModesView to trigger its delete flow
+				window.postMessage(
+					{ type: "openDeleteModeInSettings", slug: (message as any).slug, name: (message as any).name },
+					"*",
+				)
+			}
+			// Internal request from ModesView to open the enable/disable dialog
+			if ((message as any).type === "showModeEnableDisableDialogRequest" && (message as any).modes) {
+				setModeDialogModes((message as any).modes as any[])
+				setModeDialogOpen(true)
+			}
+
 			if (message.type === "showDeleteMessageDialog" && message.messageTs) {
 				setDeleteMessageDialogState({ isOpen: true, messageTs: message.messageTs })
 			}
