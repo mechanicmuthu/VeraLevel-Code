@@ -545,6 +545,10 @@ export class CustomModesManager {
 
 				// Clear cache when modes are deleted
 				this.clearCache()
+
+				// Add a small delay to ensure file operations are complete before refreshing UI
+				await new Promise((resolve) => setTimeout(resolve, 100))
+
 				await this.refreshMergedState()
 			})
 		} catch (error) {
@@ -1069,6 +1073,12 @@ export class CustomModesManager {
 								source: "global",
 							}
 							addsForSettings.push(modeToAdd)
+							// Add a corresponding update entry for the settings file
+							const settingsPath = await this.getCustomModesFilePath()
+							if (!updatesByFile.has(settingsPath)) {
+								updatesByFile.set(settingsPath, [])
+							}
+							updatesByFile.get(settingsPath)!.push(update)
 							continue
 						}
 						console.warn(`Mode not found: ${update.slug}`)
