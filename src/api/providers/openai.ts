@@ -157,7 +157,6 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 			const requestOptions: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
 				model: modelId,
-				temperature: this.options.modelTemperature ?? (deepseekReasoner ? DEEP_SEEK_DEFAULT_TEMPERATURE : 0),
 				messages: convertedMessages,
 				stream: true as const,
 				...(isGrokXAI ? {} : { stream_options: { include_usage: true } }),
@@ -166,6 +165,14 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
 				;(requestOptions as any).service_tier = this.options.serviceTier
+			}
+
+			// Only include temperature if explicitly set
+			if (this.options.modelTemperature !== undefined) {
+				requestOptions.temperature = this.options.modelTemperature
+			} else if (deepseekReasoner) {
+				// DeepSeek Reasoner has a specific default temperature
+				requestOptions.temperature = DEEP_SEEK_DEFAULT_TEMPERATURE
 			}
 
 			// Add max_tokens if needed
