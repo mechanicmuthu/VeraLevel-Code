@@ -34,7 +34,7 @@ export const openAiNativeModels = {
 				name: "flex",
 				inputPrice: 0.625,
 				outputPrice: 5.0,
-				cacheReadsPrice: 0.063,
+				cacheReadsPrice: 0.0625,
 			},
 		],
 		description: "GPT-5: The best model for coding and agentic tasks across domains",
@@ -55,9 +55,10 @@ export const openAiNativeModels = {
 		tiers: [
 			{
 				name: "flex",
+				contextWindow: 400000,
 				inputPrice: 0.125,
 				outputPrice: 1.0,
-				cacheReadsPrice: 0.013,
+				cacheReadsPrice: 0.0125,
 			},
 		],
 		description: "GPT-5 Mini: A faster, more cost-efficient version of GPT-5 for well-defined tasks",
@@ -77,9 +78,10 @@ export const openAiNativeModels = {
 		tiers: [
 			{
 				name: "flex",
+				contextWindow: 400000,
 				inputPrice: 0.025,
 				outputPrice: 0.2,
-				cacheReadsPrice: 0.003,
+				cacheReadsPrice: 0.0025,
 			},
 		],
 		description: "GPT-5 Nano: Fastest, most cost-efficient version of GPT-5",

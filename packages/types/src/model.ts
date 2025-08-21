@@ -82,7 +82,6 @@ export const modelInfoSchema = z.object({
 	minTokensPerCachePoint: z.number().optional(),
 	maxCachePoints: z.number().optional(),
 	cachableFields: z.array(z.string()).optional(),
-	// ...existing code...
 })
 
 export type ModelInfo = z.infer<typeof modelInfoSchema>
