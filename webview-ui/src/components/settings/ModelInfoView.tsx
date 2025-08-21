@@ -29,14 +29,23 @@ export const ModelInfoView = ({
 
 	// Calculate effective pricing based on flex service tier for new OpenAI models GPT-5 family ,o3, o4-mini, if used.
 	const getEffectivePricing = (modelInfo: ModelInfo) => {
-		if (serviceTier === "flex" && modelInfo.flexPrice) {
-			const flexPrice = modelInfo.flexPrice
-			return {
-				...modelInfo,
-				inputPrice: flexPrice.inputPrice ?? modelInfo.inputPrice,
-				outputPrice: flexPrice.outputPrice ?? modelInfo.outputPrice,
-				cacheReadsPrice: flexPrice.cacheReadsPrice ?? modelInfo.cacheReadsPrice,
-				cacheWritesPrice: flexPrice.cacheWritesPrice ?? modelInfo.cacheWritesPrice,
+		// Only apply OpenAI flex tiers when the API provider is OpenAI and the model explicitly supports it
+		if (
+			(apiProvider === "openai" || apiProvider === "openai-native") &&
+			serviceTier === "flex" &&
+			modelInfo.tiers &&
+			modelInfo.supportsOpenAiFlexTier
+		) {
+			// Only use an explicitly named 'flex' tier. Do not fall back to other tiers.
+			const named = modelInfo.tiers.find((t) => t.name === "flex")
+			if (named) {
+				return {
+					...modelInfo,
+					inputPrice: named.inputPrice ?? modelInfo.inputPrice,
+					outputPrice: named.outputPrice ?? modelInfo.outputPrice,
+					cacheReadsPrice: named.cacheReadsPrice ?? modelInfo.cacheReadsPrice,
+					cacheWritesPrice: named.cacheWritesPrice ?? modelInfo.cacheWritesPrice,
+				}
 			}
 		}
 		return modelInfo
@@ -87,13 +96,15 @@ export const ModelInfoView = ({
 		modelInfo?.supportsPromptCache && effectiveModelInfo?.cacheReadsPrice && (
 			<>
 				<span className="font-medium">{t("settings:modelInfo.cacheReadsPrice")}:</span>{" "}
-				{formatPrice(effectiveModelInfo.cacheReadsPrice || 0)} / 1M tokens
+				{formatPrice(effectiveModelInfo.cacheReadsPrice || 0, { minFractionDigits: 2, maxFractionDigits: 3 })} /
+				1M tokens
 			</>
 		),
 		modelInfo?.supportsPromptCache && effectiveModelInfo?.cacheWritesPrice && (
 			<>
 				<span className="font-medium">{t("settings:modelInfo.cacheWritesPrice")}:</span>{" "}
-				{formatPrice(effectiveModelInfo.cacheWritesPrice || 0)} / 1M tokens
+				{formatPrice(effectiveModelInfo.cacheWritesPrice || 0, { minFractionDigits: 2, maxFractionDigits: 3 })}{" "}
+				/ 1M tokens
 			</>
 		),
 		apiProvider === "gemini" && (

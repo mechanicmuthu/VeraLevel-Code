@@ -164,7 +164,12 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 			}
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
-				;(requestOptions as any).service_tier = this.options.serviceTier
+				try {
+					;(requestOptions as any).service_tier = this.options.serviceTier
+				} catch (err) {
+					// Continue without service_tier if assignment fails
+					console.debug("service_tier not applied to requestOptions", err)
+				}
 			}
 
 			// Only include temperature if explicitly set
@@ -238,7 +243,12 @@ export class OpenAiHandler extends BaseProvider implements SingleCompletionHandl
 			}
 
 			if (this.options.serviceTier && this.options.serviceTier !== "auto") {
-				;(requestOptions as any).service_tier = this.options.serviceTier
+				try {
+					;(requestOptions as any).service_tier = this.options.serviceTier
+				} catch (err) {
+					// Continue without service_tier if assignment fails
+					console.debug("service_tier not applied to requestOptions", err)
+				}
 			}
 
 			// Add max_tokens if needed

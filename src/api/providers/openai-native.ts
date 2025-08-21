@@ -208,7 +208,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 		// Add service_tier parameter if configured and not "auto"
 		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
-			params.service_tier = this.options.serviceTier
+			try {
+				params.service_tier = this.options.serviceTier
+			} catch (err) {
+				console.debug("service_tier not applied to params", err)
+			}
 		}
 
 		const stream = await this.client.chat.completions.create(params)
@@ -311,7 +315,11 @@ export class OpenAiNativeHandler extends BaseProvider implements SingleCompletio
 
 		// Add service_tier parameter if configured and not "auto"
 		if (this.options.serviceTier && this.options.serviceTier !== "auto") {
-			requestBody.service_tier = this.options.serviceTier
+			try {
+				requestBody.service_tier = this.options.serviceTier
+			} catch (err) {
+				console.debug("service_tier not applied to requestBody", err)
+			}
 		}
 
 		try {

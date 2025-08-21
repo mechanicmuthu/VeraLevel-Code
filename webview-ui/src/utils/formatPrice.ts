@@ -1,8 +1,15 @@
-export const formatPrice = (price: number) => {
+type FormatPriceOptions = {
+	minFractionDigits?: number
+	maxFractionDigits?: number
+}
+
+export const formatPrice = (price: number, opts?: FormatPriceOptions) => {
+	const minDigits = opts?.minFractionDigits ?? 2
+	const maxDigits = opts?.maxFractionDigits ?? 2
 	return new Intl.NumberFormat("en-US", {
 		style: "currency",
 		currency: "USD",
-		minimumFractionDigits: 2,
-		maximumFractionDigits: 3, //E.g. for Cache reads price: $0.003 / 1M tokens for GPT-5 Nano with flex pricing
+		minimumFractionDigits: minDigits,
+		maximumFractionDigits: maxDigits,
 	}).format(price)
 }

@@ -62,24 +62,14 @@ export const modelInfoSchema = z.object({
 	outputPrice: z.number().optional(),
 	cacheWritesPrice: z.number().optional(),
 	cacheReadsPrice: z.number().optional(),
-	// Optional discounted pricing for flex service tier
-	flexPrice: z
-		.object({
-			inputPrice: z.number().optional(),
-			outputPrice: z.number().optional(),
-			cacheWritesPrice: z.number().optional(),
-			cacheReadsPrice: z.number().optional(),
-		})
-		.optional(),
-	description: z.string().optional(),
-	reasoningEffort: reasoningEffortsSchema.optional(),
-	minTokensPerCachePoint: z.number().optional(),
-	maxCachePoints: z.number().optional(),
-	cachableFields: z.array(z.string()).optional(),
+	// Optional discounted pricing for OpenAI flex service tier. Prefer using `tiers` where available.
+	supportsOpenAiFlexTier: z.boolean().optional(),
 	tiers: z
 		.array(
 			z.object({
-				contextWindow: z.number(),
+				// Optional name for the tier (e.g. 'flex')
+				name: z.string().optional(),
+				contextWindow: z.number().optional(),
 				inputPrice: z.number().optional(),
 				outputPrice: z.number().optional(),
 				cacheWritesPrice: z.number().optional(),
@@ -87,6 +77,12 @@ export const modelInfoSchema = z.object({
 			}),
 		)
 		.optional(),
+	description: z.string().optional(),
+	reasoningEffort: reasoningEffortsSchema.optional(),
+	minTokensPerCachePoint: z.number().optional(),
+	maxCachePoints: z.number().optional(),
+	cachableFields: z.array(z.string()).optional(),
+	// ...existing code...
 })
 
 export type ModelInfo = z.infer<typeof modelInfoSchema>
