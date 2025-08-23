@@ -214,6 +214,7 @@ export interface WebviewMessage {
 		| "enableDisableModesClicked"
 		| "updateModeDisabledStates"
 		| "getModesBySource"
+		| "showMdmAuthRequiredNotification"
 	text?: string
 	editedMessageContent?: string
 	tab?: "settings" | "history" | "mcp" | "modes" | "chat" | "marketplace" | "account"
